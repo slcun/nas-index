@@ -6,6 +6,9 @@ let reconnectTimer = null;
 let isConnecting = false;
 let currentCols = 80;
 let currentRows = 24;
+let reconnectCount = 0;
+let maxReconnectAttempts = 10;
+let reconnectDelay = 1000;
 
 function getWsUrl() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -18,23 +21,33 @@ async function init() {
     document.getElementById('term-host').textContent = window.location.hostname;
 
     const el = document.getElementById('terminal');
-    term = new WTerm(el, {
-        cols: currentCols,
-        rows: currentRows,
-        onData: (data) => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(data);
-            }
-        },
-        onResize: (cols, rows) => {
-            currentCols = cols;
-            currentRows = rows;
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(`\x1b[RESIZE:${cols};${rows}]`);
-            }
-        },
-    });
-    await term.init();
+    el.classList.add('theme-monokai');
+    console.log('[wterm] 开始初始化, cols=%d, rows=%d', currentCols, currentRows);
+    try {
+        term = new WTerm(el, {
+            cols: currentCols,
+            rows: currentRows,
+            onData: (data) => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(data);
+                }
+            },
+            onResize: (cols, rows) => {
+                currentCols = cols;
+                currentRows = rows;
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(`\x1b[RESIZE:${cols};${rows}]`);
+                }
+            },
+        });
+        console.log('[wterm] WTerm 实例已创建, 开始调用 init()');
+        await term.init();
+        console.log('[wterm] WTerm 初始化成功');
+    } catch (err) {
+        console.error('[wterm] WTerm 初始化失败:', err);
+        setStatus('error');
+        return;
+    }
 
     connect();
 }
@@ -44,12 +57,16 @@ function connect() {
     isConnecting = true;
     setStatus('connecting');
 
-    ws = new WebSocket(getWsUrl());
+    const url = getWsUrl();
+    console.log('[wterm] 开始连接 WebSocket:', url);
+    ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
         isConnecting = false;
+        reconnectCount = 0; // 重置重连计数
         setStatus('connected');
+        console.log('[wterm] WebSocket 已连接');
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
@@ -67,15 +84,17 @@ function connect() {
         }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
         isConnecting = false;
         setStatus('disconnected');
+        console.warn('[wterm] WebSocket 已断开, code=%d, reason=%s', e.code, e.reason);
         scheduleReconnect();
     };
 
-    ws.onerror = () => {
+    ws.onerror = (e) => {
         isConnecting = false;
         setStatus('error');
+        console.error('[wterm] WebSocket 连接错误', e);
     };
 
     term.focus();
@@ -83,11 +102,36 @@ function connect() {
 
 function scheduleReconnect() {
     if (reconnectTimer) return;
+    
+    if (reconnectCount >= maxReconnectAttempts) {
+        console.error('[wterm] 已达到最大重连次数 (%d/%d)，停止重连', reconnectCount, maxReconnectAttempts);
+        setStatus('error');
+        return;
+    }
+    
+    reconnectCount++;
+    
+    // 指数退避策略：1s, 2s, 4s, 8s, 16s，最大16s
+    const delay = Math.min(reconnectDelay * Math.pow(2, reconnectCount - 1), 16000);
+    console.log('[wterm] %d秒后进行第%d次重连 (最大%d次)', delay/1000, reconnectCount, maxReconnectAttempts);
+    
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         connect();
-    }, 3000);
+    }, delay);
 }
+
+// 页面卸载时清理资源
+window.addEventListener('beforeunload', () => {
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+});
 
 function setStatus(state) {
     const el = document.getElementById('term-status');
