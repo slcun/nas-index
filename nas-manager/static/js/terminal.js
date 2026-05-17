@@ -136,11 +136,15 @@ window.addEventListener('beforeunload', () => {
 function setStatus(state) {
     const el = document.getElementById('term-status');
     const map = {
-        connecting: ['● 连接中', 'status-connecting'],
+        connecting: [`● 重连中(${reconnectCount}/${maxReconnectAttempts})`, 'status-connecting'],
         connected: ['● 已连接', 'status-connected'],
         disconnected: ['● 已断开', 'status-disconnected'],
-        error: ['● 连接失败', 'status-error'],
+        error: [`● 连接失败(${reconnectCount}/${maxReconnectAttempts})`, 'status-error'],
     };
+    if (reconnectCount === 0) {
+        map.connecting = ['● 连接中', 'status-connecting'];
+        map.error = ['● 连接失败', 'status-error'];
+    }
     const [text, cls] = map[state] || ['● 未知', ''];
     el.textContent = text;
     el.className = 'term-status ' + cls;
