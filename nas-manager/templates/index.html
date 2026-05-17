@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NAS 服务管理面板</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>NAS 服务管理面板</h1>
+            <div class="host-info">
+                <span>主机: <strong id="hostname">-</strong></span>
+                <span>IP: <strong id="host-ip">-</strong></span>
+            </div>
+            <div class="stats-bar">
+                <span>总计: <strong id="total-count">0</strong></span>
+                <span>运行中: <strong id="active-count" class="text-green">0</strong></span>
+                <span>已停止: <strong id="inactive-count" class="text-red">0</strong></span>
+            </div>
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="搜索服务名称或描述...">
+            </div>
+        </header>
+
+        <main id="service-container">
+            <div class="no-services">正在加载服务列表...</div>
+        </main>
+
+        <footer>
+            <p>NAS 服务管理面板 &copy; <span id="current-year"></span></p>
+            <p>当前访问地址: <span id="current-host"></span></p>
+        </footer>
+    </div>
+
+    <div id="toast-container"></div>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
