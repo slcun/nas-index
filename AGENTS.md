@@ -16,12 +16,15 @@ Two independent projects coexist at root:
 **Entrypoint:** `nas-manager/app.py`
 
 **Dev run:** `cd nas-manager && python app.py` → http://localhost:5000
+  - Terminal available at `/terminal`; WebSocket PTY server at `:5001` (`ws_server.py`)
+  - On Windows, `ws_server.py` won't work (pty fork unavailable) — terminal page still loads, WS will fail gracefully
 
 **Prod deploy (Debian 13 only):** `sudo bash nas-manager/install.sh`
   - Installs to `/opt/nasmanager/`, runs as `nasmanager` user, systemd-managed
+  - Two services: `nasmanager.service` (Flask :5000) + `nasmanager-ws.service` (WebSocket :5001)
   - Requires sudoers at `/etc/sudoers.d/nasmanager` (created by install.sh)
 
-**Dependencies:** `flask>=3.0`, `pyyaml>=6.0` (`requirements.txt`)
+**Dependencies:** `flask>=3.0`, `pyyaml>=6.0`, `websockets>=14.0`, `ptyprocess>=0.7` (`requirements.txt`)
 
 No tests, no linter config, no CI.
 
@@ -39,6 +42,15 @@ No tests, no linter config, no CI.
 - Dynamic button event binding via `MutationObserver` (not delegated events), at `app.js:192-195`
 - Toast notifications auto-dismiss after 3s (CSS opacity transition), at `app.js:197-208`
 - Search debounces at 200ms, at `app.js:152-156`
+
+## WebSocket terminal (`ws_server.py`)
+
+- Separate asyncio server on port `:5001` using `websockets` library
+- Each WS connection spawns a `/bin/bash` via `pty.fork()` with PTY resize support
+- Terminal page at `/terminal` loads `@wterm/dom` from CDN (jsdelivr importmap, no build step)
+- Connection status indicator + auto-reconnect every 3s
+- Max 10 concurrent connections, idle timeout 15 min (configurable via env)
+- WS server won't start on non-systemd platforms (Windows) — terminal page still renders, WS fails silently
 
 ## API routes (all in `app.py`)
 

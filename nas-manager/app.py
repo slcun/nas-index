@@ -31,6 +31,11 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/terminal')
+def terminal():
+    return render_template('terminal.html')
+
+
 @app.route('/api/services')
 def api_services():
     services = svc_mgr.list_services()

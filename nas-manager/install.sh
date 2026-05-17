@@ -6,6 +6,7 @@
 set -e
 
 APP_NAME="nasmanager"
+APP_WS_NAME="nasmanager-ws"
 APP_DIR="/opt/${APP_NAME}"
 APP_USER="${APP_NAME}"
 CONFIG_DIR="${APP_DIR}"
@@ -35,6 +36,7 @@ mkdir -p "${APP_DIR}/templates"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cp -r "${SCRIPT_DIR}/app.py"          "${APP_DIR}/"
+cp -r "${SCRIPT_DIR}/ws_server.py"    "${APP_DIR}/"
 cp -r "${SCRIPT_DIR}/config_manager.py" "${APP_DIR}/"
 cp -r "${SCRIPT_DIR}/service_manager.py" "${APP_DIR}/"
 cp -r "${SCRIPT_DIR}/config.yaml"     "${APP_DIR}/"
@@ -89,13 +91,39 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
+WS_SERVICE_FILE="/etc/systemd/system/${APP_WS_NAME}.service"
+cat > "${WS_SERVICE_FILE}" << 'EOF'
+[Unit]
+Description=NAS Manager WebSocket Terminal
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nasmanager
+Group=nasmanager
+WorkingDirectory=/opt/nasmanager
+ExecStart=/usr/bin/python3 /opt/nasmanager/ws_server.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 systemctl daemon-reload
 systemctl enable "${APP_NAME}"
+systemctl enable "${APP_WS_NAME}"
 
 echo "[7/7] 启动服务..."
 systemctl start "${APP_NAME}" || {
     echo "启动失败，查看日志: journalctl -u ${APP_NAME} -n 50 --no-pager"
     exit 1
+}
+systemctl start "${APP_WS_NAME}" || {
+    echo "WebSocket 服务启动失败，查看日志: journalctl -u ${APP_WS_NAME} -n 50 --no-pager"
 }
 
 echo ""
@@ -106,10 +134,12 @@ echo ""
 echo "访问地址: http://$(hostname -I | awk '{print $1}'):5000"
 echo ""
 echo "管理命令:"
-echo "  sudo systemctl status ${APP_NAME}    # 查看状态"
-echo "  sudo systemctl restart ${APP_NAME}   # 重启"
-echo "  sudo systemctl stop ${APP_NAME}      # 停止"
-echo "  sudo journalctl -u ${APP_NAME} -f    # 查看日志"
+echo "  sudo systemctl status ${APP_NAME}       # Web 面板状态"
+echo "  sudo systemctl restart ${APP_NAME}      # 重启面板"
+echo "  sudo systemctl status ${APP_WS_NAME}    # WebSocket 终端状态"
+echo "  sudo systemctl restart ${APP_WS_NAME}   # 重启终端"
+echo "  sudo journalctl -u ${APP_NAME} -f       # 面板日志"
+echo "  sudo journalctl -u ${APP_WS_NAME} -f    # 终端日志"
 echo ""
 echo "配置文件: ${CONFIG_DIR}/config.yaml"
 echo "  - 编辑后无需重启，系统会自动检测变更"
