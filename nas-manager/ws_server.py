@@ -13,7 +13,7 @@ except ImportError:
     logger.error('websockets not installed. Run: pip install websockets')
     raise
 
-HOST = os.environ.get('WS_HOST', '127.0.0.1')
+HOST = os.environ.get('WS_HOST', '0.0.0.0')
 PORT = int(os.environ.get('WS_PORT', '5001'))
 MAX_CONNECTIONS = 10
 active_connections = set()

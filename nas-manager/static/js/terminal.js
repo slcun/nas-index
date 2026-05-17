@@ -4,6 +4,8 @@ let term = null;
 let ws = null;
 let reconnectTimer = null;
 let isConnecting = false;
+let currentCols = 80;
+let currentRows = 24;
 
 function getWsUrl() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -16,7 +18,22 @@ async function init() {
     document.getElementById('term-host').textContent = window.location.hostname;
 
     const el = document.getElementById('terminal');
-    term = new WTerm(el);
+    term = new WTerm(el, {
+        cols: currentCols,
+        rows: currentRows,
+        onData: (data) => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(data);
+            }
+        },
+        onResize: (cols, rows) => {
+            currentCols = cols;
+            currentRows = rows;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(`\x1b[RESIZE:${cols};${rows}]`);
+            }
+        },
+    });
     await term.init();
 
     connect();
@@ -38,16 +55,15 @@ function connect() {
             reconnectTimer = null;
         }
 
-        const { cols, rows } = term.getSize();
-        ws.send(`\x1b[RESIZE:${cols};${rows}]`);
+        ws.send(`\x1b[RESIZE:${currentCols};${currentRows}]`);
     };
 
     ws.onmessage = (e) => {
         const data = e.data;
         if (data instanceof ArrayBuffer) {
-            term.writeBytes(new Uint8Array(data));
+            term.write(new Uint8Array(data));
         } else if (typeof data === 'string') {
-            term.writeString(data);
+            term.write(data);
         }
     };
 
@@ -62,20 +78,7 @@ function connect() {
         setStatus('error');
     };
 
-    term.onData((data) => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(data);
-        }
-    });
-
-    new ResizeObserver(() => {
-        if (!term || !ws || ws.readyState !== WebSocket.OPEN) return;
-        const { cols, rows } = term.getSize();
-        ws.send(`\x1b[RESIZE:${cols};${rows}]`);
-    }).observe(el);
-
-    el.addEventListener('focus', () => term.focus());
-    el.focus();
+    term.focus();
 }
 
 function scheduleReconnect() {
