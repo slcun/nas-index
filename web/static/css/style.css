@@ -73,6 +73,53 @@ h1 {
     border-color: #999;
 }
 
+.filter-bar {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+}
+
+.tag-btn, .group-btn {
+    padding: 0.3rem 0.8rem;
+    border: 1px solid #ddd;
+    border-radius: 16px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: #666;
+    transition: all 0.15s;
+    outline: none;
+}
+
+.tag-btn:hover, .group-btn:hover {
+    border-color: #999;
+    color: #333;
+}
+
+.tag-btn.active, .group-btn.active {
+    background: #333;
+    color: #fff;
+    border-color: #333;
+}
+
+.group-btn {
+    border-color: #c8d6e5;
+    color: #576574;
+}
+
+.group-btn:hover {
+    border-color: #8395a7;
+    color: #222f3e;
+}
+
+.group-btn.active {
+    background: #576574;
+    border-color: #576574;
+    color: #fff;
+}
+
 .nav-links {
     margin-bottom: 0.5rem;
 }
@@ -230,6 +277,41 @@ nav li {
     font-size: 0.7rem;
     background: #f0f0f0;
     color: #888;
+}
+
+.service-group {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    background: #e8ecf1;
+    color: #576574;
+    margin-left: 0.3rem;
+}
+
+.service-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-left: 1.6rem;
+    margin-bottom: 0.3rem;
+}
+
+.service-tag {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    background: #eef6ff;
+    color: #3498db;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+}
+
+.service-tag:hover {
+    background: #d6eaf8;
+    border-color: #3498db;
 }
 
 .actions {

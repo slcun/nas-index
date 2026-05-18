@@ -29,16 +29,40 @@ func (h *Handlers) GetServices(w http.ResponseWriter, r *http.Request) {
 	services := h.serviceMgr.ListServices()
 	categories := h.configMgr.GetCategories()
 
-	// 转换为 JSON 友好的格式
+	allTags := make(map[string]bool)
+	allGroups := make(map[string]bool)
+	for _, s := range services {
+		for _, tag := range s.Tags {
+			allTags[tag] = true
+		}
+		if s.Group != "" {
+			allGroups[s.Group] = true
+		}
+	}
+
+	tagsList := make([]string, 0, len(allTags))
+	for tag := range allTags {
+		tagsList = append(tagsList, tag)
+	}
+
+	groupsList := make([]string, 0, len(allGroups))
+	for group := range allGroups {
+		groupsList = append(groupsList, group)
+	}
+
 	type response struct {
 		Services   []*service.ServiceInfo `json:"services"`
 		Categories map[string]string      `json:"categories"`
+		Tags       []string               `json:"tags"`
+		Groups     []string               `json:"groups"`
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response{
 		Services:   services,
 		Categories: categories,
+		Tags:       tagsList,
+		Groups:     groupsList,
 	})
 }
 

@@ -2,13 +2,15 @@ package config
 
 // Service 定义了 NAS 服务的配置结构
 type Service struct {
-	Name        string `yaml:"name" json:"name"`
-	DisplayName string `yaml:"display_name" json:"display_name"`
-	Description string `yaml:"description" json:"description"`
-	Port        int    `yaml:"port,omitempty" json:"port,omitempty"`
-	Path        string `yaml:"path,omitempty" json:"path,omitempty"`
-	Category    string `yaml:"category" json:"category"`
-	Web         bool   `yaml:"web" json:"web"`
+	Name        string   `yaml:"name" json:"name"`
+	DisplayName string   `yaml:"display_name" json:"display_name"`
+	Description string   `yaml:"description" json:"description"`
+	Port        int      `yaml:"port,omitempty" json:"port,omitempty"`
+	Path        string   `yaml:"path,omitempty" json:"path,omitempty"`
+	Category    string   `yaml:"category" json:"category"`
+	Web         bool     `yaml:"web" json:"web"`
+	Tags        []string `yaml:"tags,omitempty" json:"tags,omitempty"`
+	Group       string   `yaml:"group,omitempty" json:"group,omitempty"`
 }
 
 // UserConfig 定义了 Web 用户的配置结构

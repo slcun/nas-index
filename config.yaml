@@ -8,6 +8,8 @@ services:
     port: 8096
     category: media
     web: true
+    tags: [媒体, 流媒体]
+    group: 家庭娱乐
 
   - name: sonarr.service
     display_name: Sonarr
@@ -15,6 +17,8 @@ services:
     port: 8989
     category: media
     web: true
+    tags: [媒体, PVR]
+    group: 家庭娱乐
 
   - name: radarr.service
     display_name: Radarr
@@ -22,6 +26,8 @@ services:
     port: 7878
     category: media
     web: true
+    tags: [媒体, PVR]
+    group: 家庭娱乐
 
   - name: immich.service
     display_name: Immich
@@ -30,6 +36,8 @@ services:
     path: /photos
     category: media
     web: true
+    tags: [媒体, 照片]
+    group: 家庭娱乐
 
   # 文件管理
   - name: nginx.service
@@ -39,6 +47,7 @@ services:
     path: /file
     category: files
     web: true
+    tags: [文件, Web]
 
   # 下载工具
   - name: qbittorrent.service
@@ -47,6 +56,8 @@ services:
     port: 8080
     category: download
     web: true
+    tags: [下载, BT]
+    group: 下载管理
 
   - name: transmission.service
     display_name: Transmission
@@ -54,6 +65,8 @@ services:
     port: 9091
     category: download
     web: true
+    tags: [下载, BT]
+    group: 下载管理
 
   # 系统工具
   - name: cockpit.service
@@ -62,12 +75,14 @@ services:
     port: 9090
     category: system
     web: true
+    tags: [系统, 管理]
 
   - name: docker.service
     display_name: Docker
     description: 容器引擎
     category: system
     web: false
+    tags: [系统, 容器]
 
   # 备份与同步
   - name: syncthing.service
@@ -76,6 +91,7 @@ services:
     port: 8384
     category: backup
     web: true
+    tags: [同步, 备份]
 
   # 其他
   - name: prowlarr.service
@@ -84,6 +100,8 @@ services:
     port: 9696
     category: other
     web: true
+    tags: [媒体, 索引]
+    group: 家庭娱乐
 
 # 从列表中排除的系统服务（不显示在面板上）
 exclude_services:

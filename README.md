@@ -35,7 +35,7 @@ make build
 ./nas-manager
 ```
 
-默认访问地址：http://localhost:5000
+默认访问地址：<http://localhost:5000>
 
 ### 命令行参数
 
@@ -87,17 +87,17 @@ nas-manager-go/
 
 ## API 接口
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | /api/services | 获取所有服务及分类 |
-| GET | /api/services/{name} | 获取单个服务详情 |
-| POST | /api/services/{name}/start | 启动服务 |
-| POST | /api/services/{name}/stop | 停止服务 |
-| POST | /api/services/{name}/restart | 重启服务 |
-| GET | /api/services/{name}/logs | 获取服务日志 |
-| GET | /api/host/info | 获取主机信息 |
-| GET | /api/config | 获取配置 |
-| PUT | /api/config | 更新配置 |
+| 方法   | 路径                           | 说明        |
+| ---- | ---------------------------- | --------- |
+| GET  | /api/services                | 获取所有服务及分类 |
+| GET  | /api/services/{name}         | 获取单个服务详情  |
+| POST | /api/services/{name}/start   | 启动服务      |
+| POST | /api/services/{name}/stop    | 停止服务      |
+| POST | /api/services/{name}/restart | 重启服务      |
+| GET  | /api/services/{name}/logs    | 获取服务日志    |
+| GET  | /api/host/info               | 获取主机信息    |
+| GET  | /api/config                  | 获取配置      |
+| PUT  | /api/config                  | 更新配置      |
 
 ## 配置文件
 
@@ -140,10 +140,10 @@ make build-all
 
 ## 未来计划
 
-- [ ] 完整的 PTY 终端支持
+- [x] 完整的 PTY 终端支持
 - [ ] 系统服务安装/卸载功能
-- [ ] 用户认证
-- [ ] 服务分组和标签
+- [x] 用户认证
+- [x] 服务分组和标签
 - [ ] 性能监控面板
 
 ## 许可证

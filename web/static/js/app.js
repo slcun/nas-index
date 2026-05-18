@@ -1,5 +1,9 @@
 let allServices = [];
 let categories = {};
+let availableTags = [];
+let availableGroups = [];
+let activeTag = null;
+let activeGroup = null;
 let pollingInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -50,10 +54,76 @@ async function fetchServices() {
         const data = await resp.json();
         allServices = data.services;
         categories = data.categories;
+        availableTags = data.tags || [];
+        availableGroups = data.groups || [];
+        renderTagBar();
+        renderGroupBar();
         renderServices();
     } catch (e) {
         console.error('获取服务列表失败:', e);
     }
+}
+
+function renderTagBar() {
+    const container = document.getElementById('tag-bar');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const allBtn = document.createElement('button');
+    allBtn.className = 'tag-btn' + (activeTag === null ? ' active' : '');
+    allBtn.textContent = '全部';
+    allBtn.addEventListener('click', () => {
+        activeTag = null;
+        renderTagBar();
+        renderServices();
+    });
+    container.appendChild(allBtn);
+
+    availableTags.forEach(tag => {
+        const btn = document.createElement('button');
+        btn.className = 'tag-btn' + (activeTag === tag ? ' active' : '');
+        btn.textContent = tag;
+        btn.addEventListener('click', () => {
+            activeTag = activeTag === tag ? null : tag;
+            renderTagBar();
+            renderServices();
+        });
+        container.appendChild(btn);
+    });
+}
+
+function renderGroupBar() {
+    const container = document.getElementById('group-bar');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (availableGroups.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    container.style.display = 'flex';
+
+    const allBtn = document.createElement('button');
+    allBtn.className = 'group-btn' + (activeGroup === null ? ' active' : '');
+    allBtn.textContent = '全部分组';
+    allBtn.addEventListener('click', () => {
+        activeGroup = null;
+        renderGroupBar();
+        renderServices();
+    });
+    container.appendChild(allBtn);
+
+    availableGroups.forEach(group => {
+        const btn = document.createElement('button');
+        btn.className = 'group-btn' + (activeGroup === group ? ' active' : '');
+        btn.textContent = group;
+        btn.addEventListener('click', () => {
+            activeGroup = activeGroup === group ? null : group;
+            renderGroupBar();
+            renderServices();
+        });
+        container.appendChild(btn);
+    });
 }
 
 function renderServices() {
@@ -61,12 +131,25 @@ function renderServices() {
     const searchTerm = (document.getElementById('search-input').value || '').toLowerCase().trim();
 
     let filtered = allServices;
+
     if (searchTerm) {
-        filtered = allServices.filter(s =>
+        filtered = filtered.filter(s =>
             s.display_name.toLowerCase().includes(searchTerm) ||
             (s.description || '').toLowerCase().includes(searchTerm) ||
-            s.name.toLowerCase().includes(searchTerm)
+            s.name.toLowerCase().includes(searchTerm) ||
+            (s.tags || []).some(t => t.toLowerCase().includes(searchTerm)) ||
+            (s.group || '').toLowerCase().includes(searchTerm)
         );
+    }
+
+    if (activeTag) {
+        filtered = filtered.filter(s =>
+            (s.tags || []).includes(activeTag)
+        );
+    }
+
+    if (activeGroup) {
+        filtered = filtered.filter(s => s.group === activeGroup);
     }
 
     const grouped = {};
@@ -136,18 +219,31 @@ function renderCard(service) {
 
     const badge = service.unit_file_state ? `<span class="service-badge">${service.unit_file_state}</span>` : '';
 
+    let tagsHtml = '';
+    if (service.tags && service.tags.length > 0) {
+        tagsHtml = '<div class="service-tags">';
+        service.tags.forEach(tag => {
+            tagsHtml += `<span class="service-tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`;
+        });
+        tagsHtml += '</div>';
+    }
+
+    const groupHtml = service.group ? `<span class="service-group">${escapeHtml(service.group)}</span>` : '';
+
     return `<li>
         <a href="${href}" target="${target}" rel="${rel}" class="${linkClass}" data-name="${service.name}">
             <div class="service-card-header">
                 <span class="status-dot ${statusClass}"></span>
                 <span class="service-name">${escapeHtml(service.display_name)}</span>
                 ${badge}
+                ${groupHtml}
             </div>
             ${service.description ? `<div class="service-desc">${escapeHtml(service.description)}</div>` : ''}
             <div class="service-meta">
                 ${service.port ? `<span>端口 ${service.port}</span>` : ''}
                 ${!isWeb ? '<span>非网页服务</span>' : ''}
             </div>
+            ${tagsHtml}
             ${actionsHtml}
         </a>
     </li>`;
@@ -201,6 +297,17 @@ function setupActionButtons() {
                 btn.disabled = false;
                 btn.textContent = origText;
             }
+        });
+    });
+
+    document.querySelectorAll('.service-tag').forEach(tag => {
+        tag.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const tagName = tag.dataset.tag;
+            activeTag = activeTag === tagName ? null : tagName;
+            renderTagBar();
+            renderServices();
         });
     });
 }
