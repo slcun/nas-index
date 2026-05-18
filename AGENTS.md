@@ -1,72 +1,61 @@
 # AGENTS.md
 
-## Repository
+## Stack: Go 1.21+ 单二进制
 
-| Path | Description |
-|------|-------------|
-| `nas-manager/` | Flask service management dashboard (active project) |
-| `README.md` | Bilingual docs (Chinese + English) |
+**入口点:** `main.go` — 启动 HTTP (:5000) + WebSocket (:5001) 两个服务
 
-Root `index.html` referenced in old docs no longer exists — only `nas-manager/` matters.
+**构建:**
+```bash
+go build -ldflags="-s -w" -o nas-manager .
+```
+`Makefile` 中 build 目标路径 `./cmd/nas-manager` 已损坏，请直接使用上方命令。
 
-## nas-manager
+**运行:** `./nas-manager [-port 5000] [-ws-port 5001] [-config path]`
 
-**Stack:** Python Flask + YAML config + vanilla HTML/CSS/JS (no bundler)
+**依赖:** `github.com/gorilla/websocket v1.5.3`, `gopkg.in/yaml.v3 v3.0.1`
 
-**Entrypoint:** `nas-manager/app.py` — creates `ConfigManager` + `ServiceManager` at module level
+**无测试 / 无 linter / 无 CI / 无 typecheck / 无热重载**
 
-**Dev run:** `cd nas-manager && pip install -r requirements.txt && python app.py`
-- Serves on `http://0.0.0.0:5000`, **debug mode is off** (`app.run(debug=False)` at `app.py:103`)
-- Terminal page at `/terminal`; WS PTY server at `:5001` (`ws_server.py`)
-- On Windows, `ws_server.py` falls back to `asyncio.create_subprocess_exec` pipe mode (no PTY fork) — `ws_server.py:21`
-- No hot reload — restart manually after code changes
+## 架构
 
-**Dependencies:** `flask>=3.0`, `pyyaml>=6.0`, `websockets>=14.0`, `ptyprocess>=0.7`
+```
+main.go -> config.Manager (YAML 热重载) -> service.Manager (systemd / demo) -> api.Handlers -> http.ServeMux
+```
 
-**Prod deploy (Debian 13 only):** `sudo bash nas-manager/install.sh`
-- Installs to `/opt/nasmanager/`, runs as `nasmanager` user, two systemd services: `nasmanager.service` (Flask :5000) + `nasmanager-ws.service` (WS :5001)
+- 前端通过 `//go:embed web/static web/templates` 嵌入二进制
+- **Demo 模式**自动激活（非 systemd 平台如 Windows），返回 11 个硬编码模拟服务（`internal/service/manager.go:133-256`）
+- **WebSocket 终端为 demo/stub**：仅回显 + 打印 `"Command executed (demo mode)"`；`pty.go` 中 `Read()`/`Write()` 返回错误，无真实 PTY 连接
+- **`-install` / `-uninstall` 未实现**（`main.go:129-134` 打印占位信息）
 
-No tests, no linter, no CI, no typecheck.
+## API 路由 (`internal/api/router.go`)
 
-## Architecture
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/services` | 所有服务 + 分类 |
+| GET | `/api/services/{name}` | 单个服务详情 |
+| POST | `/api/services/{name}/start\|stop\|restart` | 管理服务 |
+| GET | `/api/services/{name}/logs?lines=50` | `journalctl` 输出 |
+| GET | `/api/host/info` | 主机信息 |
+| GET/PUT | `/api/config` | 读/写配置 |
 
-- **Service discovery:** `systemctl list-unit-files` + `/etc/systemd/system/` scan, merged with `config.yaml` definitions
-- **Management** (start/stop/restart): `sudo systemctl` via subprocess (`sudo=True`)
-- **Config hot-reload:** `config_manager.py:30-36` checks file mtime on each `list_services()` call — change `config.yaml` without restart
-- **Demo mode:** On non-systemd platforms (Windows, containers), falls back to 11 hardcoded mock services at `service_manager.py:5-17`; no action needed
-- **WS terminal:** Separate asyncio `websockets` server. Each connection spawns `/bin/bash` via PTY fork (Linux) or subprocess pipe (Windows). Max 10 concurrent connections. Auto-reconnect every 3s on the frontend (`terminal.js:81-87`). **No idle timeout** implemented despite being planned.
-
-## API routes (`app.py`)
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/api/services` | All services + categories |
-| GET | `/api/services/<name>` | Single service detail |
-| POST | `/api/services/<name>/start` | Start service |
-| POST | `/api/services/<name>/stop` | Stop service |
-| POST | `/api/services/<name>/restart` | Restart service |
-| GET | `/api/services/<name>/logs?lines=50` | journalctl output |
-| GET | `/api/host/info` | Hostname + IP |
-| GET/PUT | `/api/config` | Read/write raw config (PUT saves via `config_manager.save()`) |
+路由使用 Go 1.22+ `http.ServeMux` 模式匹配（`{name}` 语法）。
 
 ## Config (`config.yaml`)
 
-- `services`: list — manual definitions override auto-discovered ones (deep-merged per key at `service_manager.py:63`)
-- `exclude_services`: list — names hidden from panel
-- `categories`: map — display names for section headings
+- `services`: 列表 — 手动定义覆盖自动发现（`internal/service/model.go` 中 `mergeServiceConfig`）
+- `exclude_services`: 列表 — **字面字符串匹配，非 glob**。`systemd-*.service` 不会展开通配符
+- `categories`: 映射 — 分类显示名称
 
-**Known quirk:** `exclude_services` entries use **literal string comparison**, not glob. `systemd-*.service` matches only if literally named `systemd-*.service`. The example config at `config.yaml:134` contains `systemd-*.service` which is misleading.
+配置热重载：每次 `ListServices()` 调用检查文件 mtime，无需重启。
 
-## Frontend
+## 前端
 
-- Static files in `static/`, served by Flask (no build step)
-- `app.js` polls `GET /api/services` every 15s
-- Dynamic button event binding via `MutationObserver` on `#service-container` (`app.js:192-195`), not delegated events
-- Toast notifications: 3s auto-dismiss via CSS opacity transition (`app.js:197-208`)
-- Search debounces at 200ms (`app.js:152-156`)
-- Terminal page uses `@wterm/dom` from jsdelivr CDN importmap (`terminal.html:17-23`)
+- `internal/service/model.go` 中定义 `ServiceInfo` 结构体，包含 `Name`、`DisplayName`、`Description`、`Port`、`Category`、`ActiveState`、`UnitFileState`、`Web`、`Managed`
+- `static/js/app.js` 每 15s 轮询 `/api/services`，搜索防抖 200ms
+- WebSocket 终端页面使用本地 wterm 库（`web/static/libs/wterm/`），无 CDN 依赖
+- 无用户认证 / 无 CSRF 保护（假设内网环境）
 
-## Conventions
+## 约定
 
-- Config/script comments in Chinese; Python source files have **no comments or docstrings**
-- `PLAN.md` at `nas-manager/PLAN.md` documents the WS terminal design rationale (independent services, no Flask-SocketIO)
+- Go 源代码文件**无注释无文档字符串**；配置/脚本注释用中文
+- `exclude_services` 条目使用字面字符串比较（参见 `internal/service/systemd.go`）
