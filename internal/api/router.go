@@ -53,6 +53,7 @@ func SetupAuthMiddleware(mux *http.ServeMux, authMgr *auth.Auth, webFS embed.FS)
 		"/api/auth/login",
 		"/api/auth/register",
 		"/static/",
+		"/ws",
 	}
 
 	return authMgr.Middleware(webFS, publicPaths)(mux)

@@ -1,17 +1,21 @@
 let allServices = [];
 let categories = {};
-let availableTags = [];
-let availableGroups = [];
-let activeTag = null;
-let activeGroup = null;
+let activeCategory = null;
 let pollingInterval = null;
 
-document.addEventListener('DOMContentLoaded', () => {
-    init();
-});
+const SVG = {
+    start: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+    stop: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>',
+    restart: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
+    port: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+    cube: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 16 8 12 3 16"/><line x1="3" y1="16" x2="3" y2="22"/><polyline points="21 16 21 22"/><polyline points="12 12 12 18"/><rect x="3" y="6" width="18" height="6" rx="2"/></svg>',
+    empty: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
+};
+
+document.addEventListener('DOMContentLoaded', init);
 
 function init() {
-    document.getElementById('current-year').textContent = new Date().getFullYear();
+    initTheme();
     checkAuth();
     fetchHostInfo();
     fetchServices();
@@ -19,15 +23,36 @@ function init() {
     setupSearch();
 }
 
+function initTheme() {
+    const saved = localStorage.getItem('nas-theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = saved || (prefersDark ? 'dark' : 'light');
+    setTheme(theme);
+
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+        const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        setTheme(next);
+        localStorage.setItem('nas-theme', next);
+    });
+}
+
+function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    const showMoon = theme === 'dark';
+    document.getElementById('theme-icon-sun').style.display = showMoon ? 'none' : '';
+    document.getElementById('theme-icon-moon').style.display = showMoon ? '' : 'none';
+}
+
 async function checkAuth() {
     try {
         const resp = await fetch('/api/auth/check');
         const data = await resp.json();
         if (data.authenticated && data.username) {
-            const el = document.getElementById('username-display');
-            if (el) el.textContent = data.username;
+            const el = document.getElementById('user-badge');
+            el.style.display = 'inline-flex';
+            document.getElementById('username-display').textContent = data.username;
         }
-    } catch (e) {}
+    } catch {}
 }
 
 async function fetchHostInfo() {
@@ -36,11 +61,9 @@ async function fetchHostInfo() {
         const data = await resp.json();
         document.getElementById('hostname').textContent = data.hostname;
         document.getElementById('host-ip').textContent = data.ip;
-        document.getElementById('current-host').textContent = `${window.location.protocol}//${data.ip}:5000`;
-    } catch (e) {
+    } catch {
         document.getElementById('hostname').textContent = window.location.hostname;
         document.getElementById('host-ip').textContent = window.location.hostname;
-        document.getElementById('current-host').textContent = window.location.href;
     }
 }
 
@@ -52,77 +75,35 @@ async function fetchServices() {
             return;
         }
         const data = await resp.json();
-        allServices = data.services;
-        categories = data.categories;
-        availableTags = data.tags || [];
-        availableGroups = data.groups || [];
-        renderTagBar();
-        renderGroupBar();
+        allServices = data.services || [];
+        categories = data.categories || {};
+        renderCategoryBar();
         renderServices();
     } catch (e) {
         console.error('获取服务列表失败:', e);
     }
 }
 
-function renderTagBar() {
-    const container = document.getElementById('tag-bar');
+function renderCategoryBar() {
+    const container = document.getElementById('category-bar');
     if (!container) return;
-    container.innerHTML = '';
 
-    const allBtn = document.createElement('button');
-    allBtn.className = 'tag-btn' + (activeTag === null ? ' active' : '');
-    allBtn.textContent = '全部';
-    allBtn.addEventListener('click', () => {
-        activeTag = null;
-        renderTagBar();
-        renderServices();
+    const catKeys = [...new Set(allServices.map(s => s.category || 'other'))];
+
+    let html = `<button class="filter-btn${activeCategory === null ? ' active' : ''}" data-cat="">全部</button>`;
+    catKeys.forEach(key => {
+        const name = categories[key] || key;
+        html += `<button class="filter-btn${activeCategory === key ? ' active' : ''}" data-cat="${escapeHtml(key)}">${escapeHtml(name)}</button>`;
     });
-    container.appendChild(allBtn);
+    container.innerHTML = html;
 
-    availableTags.forEach(tag => {
-        const btn = document.createElement('button');
-        btn.className = 'tag-btn' + (activeTag === tag ? ' active' : '');
-        btn.textContent = tag;
+    container.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            activeTag = activeTag === tag ? null : tag;
-            renderTagBar();
+            const cat = btn.dataset.cat;
+            activeCategory = activeCategory === cat ? null : cat;
+            renderCategoryBar();
             renderServices();
         });
-        container.appendChild(btn);
-    });
-}
-
-function renderGroupBar() {
-    const container = document.getElementById('group-bar');
-    if (!container) return;
-    container.innerHTML = '';
-
-    if (availableGroups.length === 0) {
-        container.style.display = 'none';
-        return;
-    }
-    container.style.display = 'flex';
-
-    const allBtn = document.createElement('button');
-    allBtn.className = 'group-btn' + (activeGroup === null ? ' active' : '');
-    allBtn.textContent = '全部分组';
-    allBtn.addEventListener('click', () => {
-        activeGroup = null;
-        renderGroupBar();
-        renderServices();
-    });
-    container.appendChild(allBtn);
-
-    availableGroups.forEach(group => {
-        const btn = document.createElement('button');
-        btn.className = 'group-btn' + (activeGroup === group ? ' active' : '');
-        btn.textContent = group;
-        btn.addEventListener('click', () => {
-            activeGroup = activeGroup === group ? null : group;
-            renderGroupBar();
-            renderServices();
-        });
-        container.appendChild(btn);
     });
 }
 
@@ -134,22 +115,24 @@ function renderServices() {
 
     if (searchTerm) {
         filtered = filtered.filter(s =>
-            s.display_name.toLowerCase().includes(searchTerm) ||
+            (s.display_name || '').toLowerCase().includes(searchTerm) ||
             (s.description || '').toLowerCase().includes(searchTerm) ||
-            s.name.toLowerCase().includes(searchTerm) ||
-            (s.tags || []).some(t => t.toLowerCase().includes(searchTerm)) ||
-            (s.group || '').toLowerCase().includes(searchTerm)
+            s.name.toLowerCase().includes(searchTerm)
         );
     }
 
-    if (activeTag) {
-        filtered = filtered.filter(s =>
-            (s.tags || []).includes(activeTag)
-        );
+    if (activeCategory) {
+        filtered = filtered.filter(s => (s.category || 'other') === activeCategory);
     }
 
-    if (activeGroup) {
-        filtered = filtered.filter(s => s.group === activeGroup);
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                ${SVG.empty}
+                <p>${searchTerm || activeCategory ? '没有匹配的服务' : '正在加载服务列表...'}</p>
+            </div>`;
+        updateStats();
+        return;
     }
 
     const grouped = {};
@@ -161,161 +144,117 @@ function renderServices() {
 
     container.innerHTML = '';
 
-    const catKeys = Object.keys(grouped);
-    if (catKeys.length === 0) {
-        container.innerHTML = '<div class="no-services">没有匹配的服务</div>';
-        updateStats();
-        return;
-    }
-
-    catKeys.forEach(catKey => {
-        const section = document.createElement('section');
+    Object.keys(grouped).forEach(catKey => {
         const catName = categories[catKey] || catKey;
-        const catServices = grouped[catKey];
+        const services = grouped[catKey];
 
-        let html = `<h2>${escapeHtml(catName)}</h2><nav><ul>`;
-        catServices.forEach(s => {
-            html += renderCard(s);
-        });
-        html += '</ul></nav>';
-        section.innerHTML = html;
+        const section = document.createElement('div');
+        section.className = 'category-section';
+
+        section.innerHTML = `
+            <div class="category-header">
+                <h2>${escapeHtml(catName)}</h2>
+                <span class="category-count">${services.length}</span>
+            </div>
+            <div class="service-grid">
+                ${services.map(s => renderCard(s)).join('')}
+            </div>`;
+
         container.appendChild(section);
     });
 
     updateStats();
+    setupActions();
 }
 
-function renderCard(service) {
-    const isActive = service.active_state === 'active';
-    const statusClass = isActive ? 'active' : (service.active_state === 'failed' ? 'failed' : 'inactive');
-    const isWeb = service.web && service.port;
+function renderCard(svc) {
+    const isActive = svc.active_state === 'active';
+    const statusClass = isActive ? 'active' : (svc.active_state === 'failed' ? 'failed' : (svc.active_state === 'inactive' ? 'inactive' : 'unknown'));
+    const isWeb = svc.web && svc.port;
 
     let href = '#';
     let target = '';
     let rel = '';
-    let linkClass = 'service-card';
+    let linkClass = 'service-card status-' + statusClass;
 
     if (isWeb) {
-        const protocol = window.location.protocol;
-        const hostname = window.location.hostname;
-        const port = service.port;
-        const path = service.path || '';
-        href = `${protocol}//${hostname}:${port}${path}`;
+        const port = svc.port;
+        const path = svc.path || '';
+        href = `//${window.location.hostname}:${port}${path}`;
         target = '_blank';
         rel = 'noopener noreferrer';
         linkClass += ' web-link';
-    } else {
-        linkClass += ' non-web';
     }
 
     let actionsHtml = '';
-    if (service.managed) {
+    if (svc.managed) {
         actionsHtml = `<div class="actions">
-            ${!isActive ? `<button class="btn-start" data-name="${service.name}" title="启动">▶</button>` : ''}
-            ${isActive ? `<button class="btn-stop" data-name="${service.name}" title="停止">■</button>` : ''}
-            <button class="btn-restart" data-name="${service.name}" title="重启">↻</button>
+            ${!isActive ? `<button class="action-btn start" data-name="${svc.name}" data-action="start" title="启动">${SVG.start}</button>` : ''}
+            ${isActive ? `<button class="action-btn stop" data-name="${svc.name}" data-action="stop" title="停止">${SVG.stop}</button>` : ''}
+            <button class="action-btn restart" data-name="${svc.name}" data-action="restart" title="重启">${SVG.restart}</button>
         </div>`;
     }
 
-    const badge = service.unit_file_state ? `<span class="service-badge">${service.unit_file_state}</span>` : '';
+    const badge = svc.unit_file_state && svc.unit_file_state !== 'unknown'
+        ? `<span class="service-badge">${svc.unit_file_state}</span>` : '';
 
-    let tagsHtml = '';
-    if (service.tags && service.tags.length > 0) {
-        tagsHtml = '<div class="service-tags">';
-        service.tags.forEach(tag => {
-            tagsHtml += `<span class="service-tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</span>`;
-        });
-        tagsHtml += '</div>';
-    }
+    const metaHtml = [];
+    if (svc.port) metaHtml.push(`<span class="meta-tag">${SVG.port} ${svc.port}</span>`);
+    if (!svc.web) metaHtml.push(`<span class="meta-tag">${SVG.cube} 非网页</span>`);
 
-    const groupHtml = service.group ? `<span class="service-group">${escapeHtml(service.group)}</span>` : '';
-
-    return `<li>
-        <a href="${href}" target="${target}" rel="${rel}" class="${linkClass}" data-name="${service.name}">
-            <div class="service-card-header">
+    return `<a href="${href}" target="${target}" rel="${rel}" class="${linkClass}" data-name="${svc.name}">
+        <div class="service-card-inner">
+            <div class="service-card-row1">
                 <span class="status-dot ${statusClass}"></span>
-                <span class="service-name">${escapeHtml(service.display_name)}</span>
+                <span class="service-name">${escapeHtml(svc.display_name)}</span>
                 ${badge}
-                ${groupHtml}
             </div>
-            ${service.description ? `<div class="service-desc">${escapeHtml(service.description)}</div>` : ''}
-            <div class="service-meta">
-                ${service.port ? `<span>端口 ${service.port}</span>` : ''}
-                ${!isWeb ? '<span>非网页服务</span>' : ''}
-            </div>
-            ${tagsHtml}
-            ${actionsHtml}
-        </a>
-    </li>`;
+            ${svc.description ? `<div class="service-desc">${escapeHtml(svc.description)}</div>` : ''}
+            ${metaHtml.length ? `<div class="service-meta">${metaHtml.join('')}</div>` : ''}
+        </div>
+        ${actionsHtml}
+    </a>`;
 }
 
 function updateStats() {
-    const total = allServices.length;
-    const active = allServices.filter(s => s.active_state === 'active').length;
-    const inactive = allServices.filter(s => s.active_state === 'inactive').length;
-
-    document.getElementById('total-count').textContent = total;
-    document.getElementById('active-count').textContent = active;
-    document.getElementById('inactive-count').textContent = inactive;
+    document.getElementById('total-count').textContent = allServices.length;
+    document.getElementById('active-count').textContent = allServices.filter(s => s.active_state === 'active').length;
+    document.getElementById('inactive-count').textContent = allServices.filter(s => s.active_state === 'inactive').length;
 }
 
 function setupSearch() {
     const input = document.getElementById('search-input');
-    let debounceTimer;
+    let timer;
     input.addEventListener('input', () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(renderServices, 200);
+        clearTimeout(timer);
+        timer = setTimeout(renderServices, 200);
     });
 }
 
-function setupActionButtons() {
-    document.querySelectorAll('.btn-start, .btn-stop, .btn-restart').forEach(btn => {
+function setupActions() {
+    document.querySelectorAll('.action-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.preventDefault();
             e.stopPropagation();
 
             const name = btn.dataset.name;
-            const action = btn.classList.contains('btn-start') ? 'start'
-                        : btn.classList.contains('btn-stop') ? 'stop'
-                        : 'restart';
-
+            const action = btn.dataset.action;
             btn.disabled = true;
-            const origText = btn.textContent;
-            btn.textContent = '...';
 
             try {
                 const resp = await fetch(`/api/services/${encodeURIComponent(name)}/${action}`, { method: 'POST' });
                 const data = await resp.json();
                 showToast(data.success ? 'success' : 'error',
                     `${name}: ${data.message || (data.success ? '操作成功' : '操作失败')}`);
-                if (data.success) {
-                    setTimeout(fetchServices, 500);
-                }
-            } catch (e) {
+                if (data.success) setTimeout(fetchServices, 500);
+            } catch {
                 showToast('error', `${name}: 请求失败`);
             } finally {
                 btn.disabled = false;
-                btn.textContent = origText;
             }
         });
     });
-
-    document.querySelectorAll('.service-tag').forEach(tag => {
-        tag.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const tagName = tag.dataset.tag;
-            activeTag = activeTag === tagName ? null : tagName;
-            renderTagBar();
-            renderServices();
-        });
-    });
 }
-
-const observer = new MutationObserver(() => {
-    setupActionButtons();
-});
-observer.observe(document.getElementById('service-container'), { childList: true, subtree: true });
 
 function showToast(type, message) {
     const container = document.getElementById('toast-container');
@@ -325,14 +264,14 @@ function showToast(type, message) {
     container.appendChild(toast);
     setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.3s';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+        toast.style.transition = 'opacity 0.25s';
+        setTimeout(() => toast.remove(), 250);
+    }, 3500);
 }
 
 function escapeHtml(text) {
     if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    const d = document.createElement('div');
+    d.textContent = text;
+    return d.innerHTML;
 }

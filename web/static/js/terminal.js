@@ -12,9 +12,8 @@ let reconnectDelay = 1000;
 
 function getWsUrl() {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = location.hostname;
-    const port = 5001;
-    return `${protocol}//${host}:${port}?cols=${currentCols}&rows=${currentRows}`;
+    const host = location.host;
+    return `${protocol}//${host}/ws?cols=${currentCols}&rows=${currentRows}`;
 }
 
 async function init() {

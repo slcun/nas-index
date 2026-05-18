@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web 终端 - NAS 管理面板</title>
+    <title>Web 终端 - NAS Manager</title>
     <link rel="stylesheet" href="/static/css/terminal.css">
     <link rel="stylesheet" href="/static/libs/wterm/terminal.css">
 </head>
 <body>
     <div class="terminal-header">
-        <a href="/" class="back-link">← 返回面板</a>
-        <span class="terminal-title">Web 终端 — <span id="term-host">-</span></span>
+        <a href="/" class="back-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            返回面板
+        </a>
+        <span class="terminal-title">终端 — <strong id="term-host">-</strong></span>
         <span class="term-status" id="term-status">● 连接中</span>
     </div>
     <div id="terminal" class="terminal-container"></div>

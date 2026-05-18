@@ -3,14 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{if .IsSetup}}初始设置 - NAS 管理面板{{else}}登录 - NAS 管理面板{{end}}</title>
+    <title>{{if .IsSetup}}初始设置 - NAS Manager{{else}}登录 - NAS Manager{{end}}</title>
+    <style>
+        .theme-toggle-login {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .theme-toggle-login:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .theme-toggle-login svg {
+            width: 18px;
+            height: 18px;
+        }
+    </style>
     <link rel="stylesheet" href="/static/css/login.css">
 </head>
 <body>
+    <button class="theme-toggle-login" id="theme-toggle-login" title="切换主题">
+        <svg id="login-theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="login-theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
     <div class="login-wrapper">
         <div class="login-card">
             <div class="login-header">
-                <h1>NAS 管理面板</h1>
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                <h1>NAS Manager</h1>
                 <p class="login-subtitle">{{if .IsSetup}}创建管理员账户{{else}}请登录以继续{{end}}</p>
             </div>
 
@@ -52,6 +84,22 @@
     </div>
 
     <script>
+    (function() {
+        var saved = localStorage.getItem('nas-theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = saved || (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+        document.getElementById('login-theme-sun').style.display = theme === 'dark' ? 'none' : '';
+        document.getElementById('login-theme-moon').style.display = theme === 'dark' ? '' : 'none';
+        document.getElementById('theme-toggle-login').addEventListener('click', function() {
+            var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('nas-theme', next);
+            document.getElementById('login-theme-sun').style.display = next === 'dark' ? 'none' : '';
+            document.getElementById('login-theme-moon').style.display = next === 'dark' ? '' : 'none';
+        });
+    })();
+
     var isSetup = {{if .IsSetup}}true{{else}}false{{end}};
 
     async function handleSubmit(e) {
