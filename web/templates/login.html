@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{if .IsSetup}}初始设置 - NAS 管理面板{{else}}登录 - NAS 管理面板{{end}}</title>
+    <link rel="stylesheet" href="/static/css/login.css">
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>NAS 管理面板</h1>
+                <p class="login-subtitle">{{if .IsSetup}}创建管理员账户{{else}}请登录以继续{{end}}</p>
+            </div>
+
+            <form id="auth-form" onsubmit="return handleSubmit(event)">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" name="username" required autocomplete="username" placeholder="请输入用户名" autofocus>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="{{if .IsSetup}}设置密码（至少6位）{{else}}请输入密码{{end}}">
+                </div>
+
+                {{if .IsSetup}}
+                <div class="form-group">
+                    <label for="password-confirm">确认密码</label>
+                    <input type="password" id="password-confirm" name="password_confirm" required autocomplete="new-password" placeholder="再次输入密码">
+                </div>
+                {{end}}
+
+                <div id="error-message" class="error-message" style="display:none;"></div>
+
+                <button type="submit" class="login-btn" id="submit-btn">
+                    {{if .IsSetup}}创建账户并登录{{else}}登 录{{end}}
+                </button>
+            </form>
+
+            {{if not .IsSetup}}{{if not .HasUsers}}
+            <div class="setup-hint">
+                <p>尚未创建账户，请先<a href="/login?setup=1">设置管理员</a></p>
+            </div>
+            {{end}}{{end}}
+        </div>
+
+        <footer class="login-footer">
+            <p>NAS 服务管理面板</p>
+        </footer>
+    </div>
+
+    <script>
+    var isSetup = {{if .IsSetup}}true{{else}}false{{end}};
+
+    async function handleSubmit(e) {
+        e.preventDefault();
+
+        var username = document.getElementById('username').value.trim();
+        var password = document.getElementById('password').value;
+        var errorEl = document.getElementById('error-message');
+        var btn = document.getElementById('submit-btn');
+
+        errorEl.style.display = 'none';
+
+        if (!username || !password) {
+            showError('请填写用户名和密码');
+            return false;
+        }
+
+        if (isSetup) {
+            var confirmPwd = document.getElementById('password-confirm').value;
+            if (password !== confirmPwd) {
+                showError('两次输入的密码不一致');
+                return false;
+            }
+            if (password.length < 6) {
+                showError('密码长度不能少于6位');
+                return false;
+            }
+        }
+
+        btn.disabled = true;
+        btn.textContent = '处理中...';
+
+        try {
+            var endpoint = isSetup ? '/api/auth/register' : '/api/auth/login';
+            var body = new URLSearchParams();
+            body.append('username', username);
+            body.append('password', password);
+
+            var resp = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body
+            });
+
+            var data = await resp.json();
+
+            if (resp.ok && data.success) {
+                window.location.href = '/';
+            } else {
+                showError(data.error || '操作失败');
+            }
+        } catch (err) {
+            showError('网络错误，请重试');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = isSetup ? '创建账户并登录' : '登 录';
+        }
+
+        return false;
+    }
+
+    function showError(msg) {
+        var el = document.getElementById('error-message');
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+    </script>
+</body>
+</html>

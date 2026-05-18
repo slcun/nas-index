@@ -8,10 +8,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function init() {
     document.getElementById('current-year').textContent = new Date().getFullYear();
+    checkAuth();
     fetchHostInfo();
     fetchServices();
     pollingInterval = setInterval(fetchServices, 15000);
     setupSearch();
+}
+
+async function checkAuth() {
+    try {
+        const resp = await fetch('/api/auth/check');
+        const data = await resp.json();
+        if (data.authenticated && data.username) {
+            const el = document.getElementById('username-display');
+            if (el) el.textContent = data.username;
+        }
+    } catch (e) {}
 }
 
 async function fetchHostInfo() {
@@ -31,6 +43,10 @@ async function fetchHostInfo() {
 async function fetchServices() {
     try {
         const resp = await fetch('/api/services');
+        if (resp.status === 401) {
+            window.location.href = '/login';
+            return;
+        }
         const data = await resp.json();
         allServices = data.services;
         categories = data.categories;

@@ -94,6 +94,28 @@ h1 {
     box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 
+.nav-separator {
+    color: #ddd;
+    margin: 0 0.3rem;
+    font-size: 0.9rem;
+}
+
+.user-info {
+    font-size: 0.9rem;
+    color: #666;
+    margin: 0 0.3rem;
+}
+
+.nav-logout {
+    color: #e74c3c;
+    border-color: #f5b7b1;
+}
+
+.nav-logout:hover {
+    background: #fdedec;
+    border-color: #e74c3c;
+}
+
 h2 {
     font-size: 1.5rem;
     font-weight: 500;

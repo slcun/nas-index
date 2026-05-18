@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"nas-manager/internal/api"
+	"nas-manager/internal/auth"
 	"nas-manager/internal/config"
 	"nas-manager/internal/host"
 	"nas-manager/internal/service"
@@ -25,11 +27,11 @@ const (
 )
 
 var (
-	configPath string
-	port       int
-	wsPort     int
-	install    bool
-	uninstall  bool
+	configPath  string
+	port        int
+	wsPort      int
+	install     bool
+	uninstall   bool
 	showVersion bool
 )
 
@@ -68,6 +70,23 @@ func main() {
 	// 创建配置管理器
 	configMgr := config.NewManager(configPath)
 
+	// 创建认证管理器
+	authUsers := configMgr.GetUsers()
+	sessionTTLOne := configMgr.GetSessionTTL()
+	authUsersConverted := make([]auth.User, len(authUsers))
+	for i, u := range authUsers {
+		authUsersConverted[i] = auth.User{Name: u.Name, PasswordHash: u.PasswordHash}
+	}
+	authMgr := auth.NewAuth(authUsersConverted, time.Duration(sessionTTLOne)*time.Hour)
+
+	// 定期清理过期会话
+	go func() {
+		for {
+			time.Sleep(10 * time.Minute)
+			authMgr.CleanExpiredSessions()
+		}
+	}()
+
 	// 创建服务管理器
 	serviceMgr := service.NewManager(configMgr)
 
@@ -75,10 +94,13 @@ func main() {
 	handlers := api.NewHandlers(configMgr, serviceMgr)
 
 	// 设置路由
-	mux := api.SetupRouter(handlers, webFS)
+	mux := api.SetupRouter(handlers, authMgr, webFS)
 
 	// 添加 WebSocket 路由
 	mux.HandleFunc("/ws", terminal.HandleWebSocket)
+
+	// 应用认证中间件
+	handler := api.SetupAuthMiddleware(mux, authMgr, webFS)
 
 	// 获取主机信息
 	info := host.GetInfo()
@@ -102,7 +124,7 @@ func main() {
 	}()
 
 	log.Printf("HTTP 服务启动在 %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}
 }

@@ -147,3 +147,20 @@ func (m *Manager) GetCategories() map[string]string {
 	defer m.mu.RUnlock()
 	return m.config.Categories
 }
+
+// GetUsers 获取用户列表
+func (m *Manager) GetUsers() []UserConfig {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.config.Users
+}
+
+// GetSessionTTL 获取会话过期时间（小时）
+func (m *Manager) GetSessionTTL() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.config.SessionTTL <= 0 {
+		return 72
+	}
+	return m.config.SessionTTL
+}
