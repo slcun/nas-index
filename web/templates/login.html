@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{if .IsSetup}}初始设置 - NAS Manager{{else}}登录 - NAS Manager{{end}}</title>
+    <title>登录 - NAS Manager</title>
     <style>
         .theme-toggle-login {
             position: fixed;
@@ -43,39 +43,26 @@
             <div class="login-header">
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
                 <h1>NAS Manager</h1>
-                <p class="login-subtitle">{{if .IsSetup}}创建管理员账户{{else}}请登录以继续{{end}}</p>
+                <p class="login-subtitle">使用系统账户登录</p>
             </div>
 
             <form id="auth-form" onsubmit="return handleSubmit(event)">
                 <div class="form-group">
                     <label for="username">用户名</label>
-                    <input type="text" id="username" name="username" required autocomplete="username" placeholder="请输入用户名" autofocus>
+                    <input type="text" id="username" name="username" required autocomplete="username" placeholder="Linux 系统用户名" autofocus>
                 </div>
 
                 <div class="form-group">
                     <label for="password">密码</label>
-                    <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="{{if .IsSetup}}设置密码（至少6位）{{else}}请输入密码{{end}}">
+                    <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="系统用户密码">
                 </div>
-
-                {{if .IsSetup}}
-                <div class="form-group">
-                    <label for="password-confirm">确认密码</label>
-                    <input type="password" id="password-confirm" name="password_confirm" required autocomplete="new-password" placeholder="再次输入密码">
-                </div>
-                {{end}}
 
                 <div id="error-message" class="error-message" style="display:none;"></div>
 
                 <button type="submit" class="login-btn" id="submit-btn">
-                    {{if .IsSetup}}创建账户并登录{{else}}登 录{{end}}
+                    登 录
                 </button>
             </form>
-
-            {{if not .IsSetup}}{{if not .HasUsers}}
-            <div class="setup-hint">
-                <p>尚未创建账户，请先<a href="/login?setup=1">设置管理员</a></p>
-            </div>
-            {{end}}{{end}}
         </div>
 
         <footer class="login-footer">
@@ -100,8 +87,6 @@
         });
     })();
 
-    var isSetup = {{if .IsSetup}}true{{else}}false{{end}};
-
     async function handleSubmit(e) {
         e.preventDefault();
 
@@ -117,28 +102,15 @@
             return false;
         }
 
-        if (isSetup) {
-            var confirmPwd = document.getElementById('password-confirm').value;
-            if (password !== confirmPwd) {
-                showError('两次输入的密码不一致');
-                return false;
-            }
-            if (password.length < 6) {
-                showError('密码长度不能少于6位');
-                return false;
-            }
-        }
-
         btn.disabled = true;
-        btn.textContent = '处理中...';
+        btn.textContent = '验证中...';
 
         try {
-            var endpoint = isSetup ? '/api/auth/register' : '/api/auth/login';
             var body = new URLSearchParams();
             body.append('username', username);
             body.append('password', password);
 
-            var resp = await fetch(endpoint, {
+            var resp = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: body
@@ -149,13 +121,13 @@
             if (resp.ok && data.success) {
                 window.location.href = '/';
             } else {
-                showError(data.error || '操作失败');
+                showError(data.error || '登录失败');
             }
         } catch (err) {
             showError('网络错误，请重试');
         } finally {
             btn.disabled = false;
-            btn.textContent = isSetup ? '创建账户并登录' : '登 录';
+            btn.textContent = '登 录';
         }
 
         return false;

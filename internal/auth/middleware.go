@@ -58,19 +58,12 @@ func (a *Auth) handleUnauthorized(w http.ResponseWriter, r *http.Request, webFS 
 		return
 	}
 
-	if !a.HasUsers() {
-		http.Redirect(w, r, "/login?setup=1", http.StatusFound)
-		return
-	}
-
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
 // HandleLoginPage 渲染登录页面
 func (a *Auth) HandleLoginPage(webFS embed.FS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		isSetup := r.URL.Query().Get("setup") == "1"
-
 		tmpl, err := template.ParseFS(webFS, "web/templates/login.html")
 		if err != nil {
 			log.Printf("模板解析失败: %v", err)
@@ -79,21 +72,13 @@ func (a *Auth) HandleLoginPage(webFS embed.FS) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		tmpl.Execute(w, map[string]interface{}{
-			"IsSetup":  isSetup,
-			"HasUsers": a.HasUsers(),
-		})
+		tmpl.Execute(w, nil)
 	}
 }
 
 // HandleLogin 处理登录请求
 func (a *Auth) HandleLogin() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
-			return
-		}
-
 		username := r.FormValue("username")
 		password := r.FormValue("password")
 		clientIP := r.RemoteAddr
@@ -103,53 +88,6 @@ func (a *Auth) HandleLogin() http.HandlerFunc {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"` + err.Error() + `"}`))
-			return
-		}
-
-		http.SetCookie(w, &http.Cookie{
-			Name:     cookieName,
-			Value:    token,
-			Path:     "/",
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-			MaxAge:   int(a.sessionTTL.Seconds()),
-		})
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"success":true}`))
-	}
-}
-
-// HandleRegister 处理注册请求
-func (a *Auth) HandleRegister() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
-			return
-		}
-
-		if a.HasUsers() {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusForbidden)
-			w.Write([]byte(`{"error":"已存在用户，不允许注册"}`))
-			return
-		}
-
-		username := r.FormValue("username")
-		password := r.FormValue("password")
-
-		if err := a.Register(username, password); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"error":"` + err.Error() + `"}`))
-			return
-		}
-
-		token, err := a.Authenticate(username, password, r.RemoteAddr)
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(`{"error":"注册成功但自动登录失败"}`))
 			return
 		}
 
@@ -182,37 +120,6 @@ func (a *Auth) HandleLogout() http.HandlerFunc {
 		})
 
 		http.Redirect(w, r, "/login", http.StatusFound)
-	}
-}
-
-// HandleChangePassword 处理修改密码请求
-func (a *Auth) HandleChangePassword() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "方法不允许", http.StatusMethodNotAllowed)
-			return
-		}
-
-		username := r.Header.Get("X-User")
-		if username == "" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"error":"未授权"}`))
-			return
-		}
-
-		oldPassword := r.FormValue("old_password")
-		newPassword := r.FormValue("new_password")
-
-		if err := a.ChangePassword(username, oldPassword, newPassword); err != nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"error":"` + err.Error() + `"}`))
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"success":true,"message":"密码修改成功"}`))
 	}
 }
 

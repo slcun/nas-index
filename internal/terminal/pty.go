@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -26,8 +28,8 @@ type Terminal struct {
 	mu     sync.Mutex
 }
 
-// NewTerminal 创建一个新的 PTY 终端
-func NewTerminal(cols, rows uint16) (*Terminal, error) {
+// NewTerminal 创建一个新的 PTY 终端，以指定用户身份运行
+func NewTerminal(cols, rows uint16, username string) (*Terminal, error) {
 	connectionsMutex.Lock()
 	if activeConnections >= maxConnections {
 		connectionsMutex.Unlock()
@@ -46,34 +48,92 @@ func NewTerminal(cols, rows uint16) (*Terminal, error) {
 		return t, err
 	}
 
-	return newPtyTerminal(cols, rows)
+	return newPtyTerminal(cols, rows, username)
+}
+
+// getCurrentUser 获取当前进程的运行用户名
+func getCurrentUser() string {
+	u, err := user.Current()
+	if err != nil {
+		return os.Getenv("USER")
+	}
+	return u.Username
 }
 
 // newPtyTerminal 在 Linux/macOS 上创建真实 PTY 终端
-func newPtyTerminal(cols, rows uint16) (*Terminal, error) {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/bash"
+func newPtyTerminal(cols, rows uint16, username string) (*Terminal, error) {
+	currentUser := getCurrentUser()
+
+	var cmd *exec.Cmd
+
+	if username == "" || username == currentUser {
+		shell := getUserShell(currentUser)
+		cmd = exec.Command(shell, "-l")
+	} else {
+		shell := getUserShell(username)
+		cmd = exec.Command("sudo", "-n", "-u", username, shell, "-l")
 	}
 
-	cmd := exec.Command(shell, "-l")
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setsid:  true,
+		Setctty: true,
+	}
 
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{
 		Cols: cols,
 		Rows: rows,
 	})
 	if err != nil {
-		connectionsMutex.Lock()
-		activeConnections--
-		connectionsMutex.Unlock()
-		return nil, fmt.Errorf("启动 PTY 失败: %w", err)
+		if strings.Contains(err.Error(), "sudo") || username != currentUser {
+			shell := getUserShell(currentUser)
+			fallbackCmd := exec.Command(shell, "-l")
+			fallbackCmd.Env = append(os.Environ(), "TERM=xterm-256color")
+			fallbackCmd.SysProcAttr = &syscall.SysProcAttr{
+				Setsid:  true,
+				Setctty: true,
+			}
+			ptmx, err = pty.StartWithSize(fallbackCmd, &pty.Winsize{
+				Cols: cols,
+				Rows: rows,
+			})
+			if err != nil {
+				connectionsMutex.Lock()
+				activeConnections--
+				connectionsMutex.Unlock()
+				return nil, fmt.Errorf("启动 PTY 失败: %w", err)
+			}
+			cmd = fallbackCmd
+		} else {
+			connectionsMutex.Lock()
+			activeConnections--
+			connectionsMutex.Unlock()
+			return nil, fmt.Errorf("启动 PTY 失败: %w", err)
+		}
 	}
 
 	return &Terminal{
 		cmd:  cmd,
 		ptmx: ptmx,
 	}, nil
+}
+
+// getUserShell 获取用户的默认 shell
+func getUserShell(username string) string {
+	cmd := exec.Command("getent", "passwd", username)
+	output, err := cmd.Output()
+	if err != nil {
+		return "/bin/bash"
+	}
+
+	parts := strings.Split(string(output), ":")
+	if len(parts) >= 7 {
+		shell := strings.TrimSpace(parts[6])
+		if shell != "" {
+			return shell
+		}
+	}
+	return "/bin/bash"
 }
 
 // newSimpleTerminal 在 Windows 上创建简单终端（回退方案）

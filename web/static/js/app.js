@@ -1,7 +1,10 @@
 let allServices = [];
-let categories = {};
-let activeCategory = null;
+let availableTags = [];
+let availableGroups = [];
+let activeTag = null;
+let activeGroup = null;
 let pollingInterval = null;
+let systemServicesCache = null;
 
 const SVG = {
     start: '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
@@ -10,6 +13,8 @@ const SVG = {
     port: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
     cube: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 16 8 12 3 16"/><line x1="3" y1="16" x2="3" y2="22"/><polyline points="21 16 21 22"/><polyline points="12 12 12 18"/><rect x="3" y="6" width="18" height="6" rx="2"/></svg>',
     empty: '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
+    edit: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
 };
 
 document.addEventListener('DOMContentLoaded', init);
@@ -21,6 +26,7 @@ function init() {
     fetchServices();
     pollingInterval = setInterval(fetchServices, 15000);
     setupSearch();
+    setupAddBtn();
 }
 
 function initTheme() {
@@ -48,11 +54,37 @@ async function checkAuth() {
         const resp = await fetch('/api/auth/check');
         const data = await resp.json();
         if (data.authenticated && data.username) {
-            const el = document.getElementById('user-badge');
-            el.style.display = 'inline-flex';
+            const menu = document.getElementById('user-menu');
+            menu.style.display = '';
             document.getElementById('username-display').textContent = data.username;
+            setupUserMenu();
         }
     } catch {}
+}
+
+function setupUserMenu() {
+    const badge = document.getElementById('user-badge');
+    const dropdown = document.getElementById('user-dropdown');
+
+    badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+
+    document.addEventListener('click', () => {
+        dropdown.classList.remove('open');
+    }, false);
+
+    dropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+        try {
+            await fetch('/logout');
+        } catch {}
+        window.location.href = '/login';
+    });
 }
 
 async function fetchHostInfo() {
@@ -76,32 +108,63 @@ async function fetchServices() {
         }
         const data = await resp.json();
         allServices = data.services || [];
-        categories = data.categories || {};
-        renderCategoryBar();
+        availableTags = data.tags || [];
+        availableGroups = data.groups || [];
+        renderGroupBar();
+        renderTagBar();
         renderServices();
     } catch (e) {
         console.error('获取服务列表失败:', e);
     }
 }
 
-function renderCategoryBar() {
-    const container = document.getElementById('category-bar');
+function setupAddBtn() {
+    const btn = document.getElementById('add-service-btn');
+    if (btn) {
+        btn.addEventListener('click', () => openServiceModal());
+    }
+}
+
+function renderGroupBar() {
+    const container = document.getElementById('group-bar');
     if (!container) return;
 
-    const catKeys = [...new Set(allServices.map(s => s.category || 'other'))];
+    const groups = [...new Set(allServices.map(s => s.group || '未分组'))];
 
-    let html = `<button class="filter-btn${activeCategory === null ? ' active' : ''}" data-cat="">全部</button>`;
-    catKeys.forEach(key => {
-        const name = categories[key] || key;
-        html += `<button class="filter-btn${activeCategory === key ? ' active' : ''}" data-cat="${escapeHtml(key)}">${escapeHtml(name)}</button>`;
+    let html = `<button class="group-btn${activeGroup === null ? ' active' : ''}" data-group="">全部</button>`;
+    groups.forEach(group => {
+        html += `<button class="group-btn${activeGroup === group ? ' active' : ''}" data-group="${escapeHtml(group)}">${escapeHtml(group)}</button>`;
     });
     container.innerHTML = html;
 
-    container.querySelectorAll('.filter-btn').forEach(btn => {
+    container.querySelectorAll('.group-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const cat = btn.dataset.cat;
-            activeCategory = activeCategory === cat ? null : cat;
-            renderCategoryBar();
+            const group = btn.dataset.group;
+            activeGroup = activeGroup === group ? null : group;
+            renderGroupBar();
+            renderServices();
+        });
+    });
+}
+
+function renderTagBar() {
+    const container = document.getElementById('tag-bar');
+    if (!container || availableTags.length === 0) {
+        if (container) container.innerHTML = '';
+        return;
+    }
+
+    let html = `<button class="tag-btn${activeTag === null ? ' active' : ''}" data-tag="">全部</button>`;
+    availableTags.forEach(tag => {
+        html += `<button class="tag-btn${activeTag === tag ? ' active' : ''}" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`;
+    });
+    container.innerHTML = html;
+
+    container.querySelectorAll('.tag-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tag = btn.dataset.tag;
+            activeTag = activeTag === tag ? null : tag;
+            renderTagBar();
             renderServices();
         });
     });
@@ -117,19 +180,25 @@ function renderServices() {
         filtered = filtered.filter(s =>
             (s.display_name || '').toLowerCase().includes(searchTerm) ||
             (s.description || '').toLowerCase().includes(searchTerm) ||
-            s.name.toLowerCase().includes(searchTerm)
+            s.name.toLowerCase().includes(searchTerm) ||
+            (s.tags || []).some(t => t.toLowerCase().includes(searchTerm)) ||
+            (s.group || '').toLowerCase().includes(searchTerm)
         );
     }
 
-    if (activeCategory) {
-        filtered = filtered.filter(s => (s.category || 'other') === activeCategory);
+    if (activeTag) {
+        filtered = filtered.filter(s => (s.tags || []).includes(activeTag));
+    }
+
+    if (activeGroup) {
+        filtered = filtered.filter(s => (s.group || '未分组') === activeGroup);
     }
 
     if (filtered.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 ${SVG.empty}
-                <p>${searchTerm || activeCategory ? '没有匹配的服务' : '正在加载服务列表...'}</p>
+                <p>${searchTerm || activeTag || activeGroup ? '没有匹配的服务' : '暂无服务，点击上方「添加」按钮添加'}</p>
             </div>`;
         updateStats();
         return;
@@ -137,23 +206,28 @@ function renderServices() {
 
     const grouped = {};
     filtered.forEach(s => {
-        const cat = s.category || 'other';
-        if (!grouped[cat]) grouped[cat] = [];
-        grouped[cat].push(s);
+        const groupKey = s.group || '未分组';
+        if (!grouped[groupKey]) grouped[groupKey] = [];
+        grouped[groupKey].push(s);
+    });
+
+    const sortedKeys = Object.keys(grouped).sort((a, b) => {
+        if (a === '未分组') return 1;
+        if (b === '未分组') return -1;
+        return a.localeCompare(b, 'zh-CN');
     });
 
     container.innerHTML = '';
 
-    Object.keys(grouped).forEach(catKey => {
-        const catName = categories[catKey] || catKey;
-        const services = grouped[catKey];
+    sortedKeys.forEach(key => {
+        const services = grouped[key];
 
         const section = document.createElement('div');
         section.className = 'category-section';
 
         section.innerHTML = `
             <div class="category-header">
-                <h2>${escapeHtml(catName)}</h2>
+                <h2>${escapeHtml(key)}</h2>
                 <span class="category-count">${services.length}</span>
             </div>
             <div class="service-grid">
@@ -186,33 +260,32 @@ function renderCard(svc) {
         linkClass += ' web-link';
     }
 
-    let actionsHtml = '';
-    if (svc.managed) {
-        actionsHtml = `<div class="actions">
-            ${!isActive ? `<button class="action-btn start" data-name="${svc.name}" data-action="start" title="启动">${SVG.start}</button>` : ''}
-            ${isActive ? `<button class="action-btn stop" data-name="${svc.name}" data-action="stop" title="停止">${SVG.stop}</button>` : ''}
-            <button class="action-btn restart" data-name="${svc.name}" data-action="restart" title="重启">${SVG.restart}</button>
-        </div>`;
-    }
-
-    const badge = svc.unit_file_state && svc.unit_file_state !== 'unknown'
-        ? `<span class="service-badge">${svc.unit_file_state}</span>` : '';
-
     const metaHtml = [];
     if (svc.port) metaHtml.push(`<span class="meta-tag">${SVG.port} ${svc.port}</span>`);
     if (!svc.web) metaHtml.push(`<span class="meta-tag">${SVG.cube} 非网页</span>`);
+
+    const tagsHtml = (svc.tags || []).map(t =>
+        `<span class="service-tag" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`
+    ).join('');
 
     return `<a href="${href}" target="${target}" rel="${rel}" class="${linkClass}" data-name="${svc.name}">
         <div class="service-card-inner">
             <div class="service-card-row1">
                 <span class="status-dot ${statusClass}"></span>
                 <span class="service-name">${escapeHtml(svc.display_name)}</span>
-                ${badge}
+                ${svc.unit_file_state && svc.unit_file_state !== 'unknown' ? `<span class="service-badge">${svc.unit_file_state}</span>` : ''}
             </div>
             ${svc.description ? `<div class="service-desc">${escapeHtml(svc.description)}</div>` : ''}
             ${metaHtml.length ? `<div class="service-meta">${metaHtml.join('')}</div>` : ''}
+            ${tagsHtml ? `<div class="service-tags">${tagsHtml}</div>` : ''}
         </div>
-        ${actionsHtml}
+        <div class="actions">
+            ${!isActive ? `<button class="action-btn start" data-name="${svc.name}" data-action="start" title="启动">${SVG.start}</button>` : ''}
+            ${isActive ? `<button class="action-btn stop" data-name="${svc.name}" data-action="stop" title="停止">${SVG.stop}</button>` : ''}
+            <button class="action-btn restart" data-name="${svc.name}" data-action="restart" title="重启">${SVG.restart}</button>
+            <button class="action-btn edit" data-name="${svc.name}" data-action="edit" title="编辑">${SVG.edit}</button>
+            <button class="action-btn delete" data-name="${svc.name}" data-action="delete" title="删除">${SVG.trash}</button>
+        </div>
     </a>`;
 }
 
@@ -239,8 +312,27 @@ function setupActions() {
 
             const name = btn.dataset.name;
             const action = btn.dataset.action;
-            btn.disabled = true;
 
+            if (action === 'edit') {
+                const svc = allServices.find(s => s.name === name);
+                if (svc) openServiceModal(svc);
+                return;
+            }
+
+            if (action === 'delete') {
+                if (!confirm(`确定要删除服务「${name}」吗？`)) return;
+                try {
+                    const resp = await fetch(`/api/services/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                    const data = await resp.json();
+                    showToast(data.success ? 'success' : 'error', data.message || (data.success ? '删除成功' : '删除失败'));
+                    if (data.success) fetchServices();
+                } catch {
+                    showToast('error', '删除请求失败');
+                }
+                return;
+            }
+
+            btn.disabled = true;
             try {
                 const resp = await fetch(`/api/services/${encodeURIComponent(name)}/${action}`, { method: 'POST' });
                 const data = await resp.json();
@@ -254,7 +346,205 @@ function setupActions() {
             }
         });
     });
+
+    document.querySelectorAll('.service-tag').forEach(tag => {
+        tag.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            activeTag = tag.dataset.tag;
+            renderTagBar();
+            renderServices();
+        });
+    });
 }
+
+// ========== 服务编辑弹窗 ==========
+
+async function openServiceModal(existingSvc) {
+    const isEdit = !!existingSvc;
+    const modal = document.getElementById('service-modal');
+    const title = document.getElementById('modal-title');
+
+    title.textContent = isEdit ? '编辑服务' : '添加服务';
+
+    const nameInput = document.getElementById('svc-name');
+    const nameGroup = document.getElementById('svc-name-group');
+    const selectGroup = document.getElementById('svc-system-select-group');
+
+    if (isEdit) {
+        nameGroup.style.display = '';
+        selectGroup.style.display = 'none';
+        nameInput.value = existingSvc.name;
+        nameInput.readOnly = true;
+    } else {
+        nameGroup.style.display = 'none';
+        selectGroup.style.display = '';
+        nameInput.readOnly = false;
+        nameInput.value = '';
+    }
+
+    document.getElementById('svc-display-name').value = isEdit ? (existingSvc.display_name || '') : '';
+    document.getElementById('svc-description').value = isEdit ? (existingSvc.description || '') : '';
+    document.getElementById('svc-port').value = isEdit ? (existingSvc.port || '') : '';
+    document.getElementById('svc-path').value = isEdit ? (existingSvc.path || '') : '';
+    document.getElementById('svc-web').checked = isEdit ? existingSvc.web : true;
+    document.getElementById('svc-tags').value = isEdit ? (existingSvc.tags || []).join(', ') : '';
+    document.getElementById('svc-group').value = isEdit ? (existingSvc.group || '') : '';
+
+    const groupDatalist = document.getElementById('group-list');
+    groupDatalist.innerHTML = availableGroups.map(g => `<option value="${escapeHtml(g)}">`).join('');
+
+    if (!isEdit) {
+        await loadSystemServices();
+    }
+
+    modal.classList.add('open');
+
+    const closeBtn = document.getElementById('modal-close');
+    const cancelBtn = document.getElementById('modal-cancel');
+    const saveBtn = document.getElementById('modal-save');
+
+    const closeHandler = () => modal.classList.remove('open');
+    const saveHandler = () => saveService(isEdit, existingSvc);
+
+    closeBtn.onclick = closeHandler;
+    cancelBtn.onclick = closeHandler;
+    saveBtn.onclick = saveHandler;
+
+    modal.querySelector('.modal-overlay').onclick = closeHandler;
+
+    const systemSelect = document.getElementById('svc-system-select');
+    if (!isEdit) {
+        systemSelect.onchange = () => {
+            const opt = systemSelect.selectedOptions[0];
+            if (opt && opt.value) {
+                nameInput.value = opt.value;
+                document.getElementById('svc-display-name').value = opt.dataset.display || '';
+                document.getElementById('svc-description').value = opt.dataset.desc || '';
+            }
+        };
+    }
+}
+
+async function loadSystemServices() {
+    const select = document.getElementById('svc-system-select');
+    if (systemServicesCache) {
+        renderSystemSelect(select, systemServicesCache);
+        return;
+    }
+
+    select.innerHTML = '<option value="">加载中...</option>';
+    try {
+        const resp = await fetch('/api/system/services');
+        const data = await resp.json();
+        systemServicesCache = data.services || [];
+        renderSystemSelect(select, systemServicesCache);
+    } catch {
+        select.innerHTML = '<option value="">加载失败</option>';
+    }
+}
+
+function renderSystemSelect(select, services) {
+    let html = '<option value="">-- 从系统服务选择 --</option>';
+    html += '<option value="__custom">自定义服务...</option>';
+
+    const unconfigured = services.filter(s => !s.configured);
+    const configured = services.filter(s => s.configured);
+
+    if (unconfigured.length > 0) {
+        html += '<optgroup label="未配置">';
+        unconfigured.forEach(s => {
+            const displayName = s.name.replace('.service', '');
+            html += `<option value="${escapeHtml(s.name)}" data-display="${escapeHtml(displayName)}" data-desc="${escapeHtml(s.description)}">${escapeHtml(displayName)} — ${escapeHtml(s.description)}</option>`;
+        });
+        html += '</optgroup>';
+    }
+
+    if (configured.length > 0) {
+        html += '<optgroup label="已配置">';
+        configured.forEach(s => {
+            const displayName = s.name.replace('.service', '');
+            html += `<option value="${escapeHtml(s.name)}" data-display="${escapeHtml(displayName)}" data-desc="${escapeHtml(s.description)}">${escapeHtml(displayName)} — ${escapeHtml(s.description)}</option>`;
+        });
+        html += '</optgroup>';
+    }
+
+    select.innerHTML = html;
+
+    select.onchange = () => {
+        const nameInput = document.getElementById('svc-name');
+        if (select.value === '__custom') {
+            document.getElementById('svc-name-group').style.display = '';
+            nameInput.value = '';
+            nameInput.readOnly = false;
+            nameInput.focus();
+        } else if (select.value) {
+            document.getElementById('svc-name-group').style.display = '';
+            nameInput.value = select.value;
+            nameInput.readOnly = true;
+            const opt = select.selectedOptions[0];
+            if (opt) {
+                document.getElementById('svc-display-name').value = opt.dataset.display || '';
+                document.getElementById('svc-description').value = opt.dataset.desc || '';
+            }
+        } else {
+            document.getElementById('svc-name-group').style.display = 'none';
+        }
+    };
+}
+
+async function saveService(isEdit, existingSvc) {
+    const nameInput = document.getElementById('svc-name');
+    const name = nameInput.value.trim();
+
+    if (!name) {
+        showToast('error', '请输入服务名称');
+        return;
+    }
+
+    const tagsStr = document.getElementById('svc-tags').value.trim();
+    const tags = tagsStr ? tagsStr.split(/[,，]/).map(t => t.trim()).filter(t => t) : [];
+
+    const svc = {
+        name: name,
+        display_name: document.getElementById('svc-display-name').value.trim(),
+        description: document.getElementById('svc-description').value.trim(),
+        port: parseInt(document.getElementById('svc-port').value) || 0,
+        path: document.getElementById('svc-path').value.trim(),
+        web: document.getElementById('svc-web').checked,
+        tags: tags,
+        group: document.getElementById('svc-group').value.trim(),
+    };
+
+    try {
+        let resp;
+        if (isEdit) {
+            resp = await fetch(`/api/services/${encodeURIComponent(existingSvc.name)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(svc),
+            });
+        } else {
+            resp = await fetch('/api/services', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(svc),
+            });
+        }
+
+        const data = await resp.json();
+        if (data.success) {
+            document.getElementById('service-modal').classList.remove('open');
+            systemServicesCache = null;
+            fetchServices();
+        }
+        showToast(data.success ? 'success' : 'error', data.message || (data.success ? '保存成功' : '保存失败'));
+    } catch {
+        showToast('error', '保存请求失败');
+    }
+}
+
+// ========== 工具函数 ==========
 
 function showToast(type, message) {
     const container = document.getElementById('toast-container');

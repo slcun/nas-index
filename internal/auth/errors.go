@@ -9,9 +9,6 @@ import (
 var (
 	ErrInvalidCredentials = errors.New("用户名或密码错误")
 	ErrRateLimited        = errors.New("登录尝试过于频繁，请稍后再试")
-	ErrUserExists         = errors.New("用户已存在")
-	ErrUserNotFound       = errors.New("用户不存在")
-	ErrPasswordTooShort   = errors.New("密码长度不能少于6位")
 )
 
 // loginAttempt 记录某个 IP 的登录失败次数
@@ -22,9 +19,9 @@ type loginAttempt struct {
 
 // loginRateLimiter 登录限流器
 type loginRateLimiter struct {
-	mu         sync.RWMutex
-	attempts   map[string]*loginAttempt
-	maxFails   int
+	mu          sync.RWMutex
+	attempts    map[string]*loginAttempt
+	maxFails    int
 	banDuration time.Duration
 }
 

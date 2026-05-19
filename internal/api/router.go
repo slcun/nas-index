@@ -15,9 +15,7 @@ func SetupRouter(handlers *Handlers, authMgr *auth.Auth, webFS embed.FS) *http.S
 
 	mux.HandleFunc("/login", authMgr.HandleLoginPage(webFS))
 	mux.HandleFunc("/api/auth/login", authMgr.HandleLogin())
-	mux.HandleFunc("/api/auth/register", authMgr.HandleRegister())
 	mux.HandleFunc("/api/auth/check", authMgr.HandleCheckAuth())
-	mux.HandleFunc("/api/auth/change-password", authMgr.HandleChangePassword())
 	mux.HandleFunc("/logout", authMgr.HandleLogout())
 
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(func() fs.FS {
@@ -34,7 +32,11 @@ func SetupRouter(handlers *Handlers, authMgr *auth.Auth, webFS embed.FS) *http.S
 	})
 
 	mux.HandleFunc("GET /api/services", handlers.GetServices)
+	mux.HandleFunc("GET /api/system/services", handlers.GetSystemServices)
 	mux.HandleFunc("GET /api/services/{name}", handlers.GetService)
+	mux.HandleFunc("POST /api/services", handlers.AddService)
+	mux.HandleFunc("PUT /api/services/{name}", handlers.UpdateService)
+	mux.HandleFunc("DELETE /api/services/{name}", handlers.DeleteService)
 	mux.HandleFunc("POST /api/services/{name}/start", handlers.StartService)
 	mux.HandleFunc("POST /api/services/{name}/stop", handlers.StopService)
 	mux.HandleFunc("POST /api/services/{name}/restart", handlers.RestartService)
@@ -51,9 +53,7 @@ func SetupAuthMiddleware(mux *http.ServeMux, authMgr *auth.Auth, webFS embed.FS)
 	publicPaths := []string{
 		"/login",
 		"/api/auth/login",
-		"/api/auth/register",
 		"/static/",
-		"/ws",
 	}
 
 	return authMgr.Middleware(webFS, publicPaths)(mux)

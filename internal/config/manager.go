@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -111,12 +112,6 @@ func (m *Manager) Get() *Config {
 	copy(servicesCopy, cfg.Services)
 	cfg.Services = servicesCopy
 
-	categoriesCopy := make(map[string]string)
-	for k, v := range cfg.Categories {
-		categoriesCopy[k] = v
-	}
-	cfg.Categories = categoriesCopy
-
 	return &cfg
 }
 
@@ -141,20 +136,6 @@ func (m *Manager) GetExcludeServices() []string {
 	return m.config.ExcludeServices
 }
 
-// GetCategories 获取分类映射
-func (m *Manager) GetCategories() map[string]string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.config.Categories
-}
-
-// GetUsers 获取用户列表
-func (m *Manager) GetUsers() []UserConfig {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.config.Users
-}
-
 // GetSessionTTL 获取会话过期时间（小时）
 func (m *Manager) GetSessionTTL() int {
 	m.mu.RLock()
@@ -163,4 +144,49 @@ func (m *Manager) GetSessionTTL() int {
 		return 72
 	}
 	return m.config.SessionTTL
+}
+
+// AddService 添加一个服务配置
+func (m *Manager) AddService(svc Service) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, s := range m.config.Services {
+		if s.Name == svc.Name {
+			return fmt.Errorf("服务 %s 已存在", svc.Name)
+		}
+	}
+
+	m.config.Services = append(m.config.Services, svc)
+	return m.saveLocked()
+}
+
+// UpdateService 更新一个服务配置
+func (m *Manager) UpdateService(name string, svc Service) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i, s := range m.config.Services {
+		if s.Name == name {
+			m.config.Services[i] = svc
+			return m.saveLocked()
+		}
+	}
+
+	return fmt.Errorf("服务 %s 不存在", name)
+}
+
+// RemoveService 删除一个服务配置
+func (m *Manager) RemoveService(name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i, s := range m.config.Services {
+		if s.Name == name {
+			m.config.Services = append(m.config.Services[:i], m.config.Services[i+1:]...)
+			return m.saveLocked()
+		}
+	}
+
+	return fmt.Errorf("服务 %s 不存在", name)
 }

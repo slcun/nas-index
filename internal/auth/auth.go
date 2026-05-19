@@ -3,17 +3,14 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
+	"github.com/creack/pty"
 )
-
-// User 表示一个 Web 用户
-type User struct {
-	Name         string `yaml:"name" json:"name"`
-	PasswordHash string `yaml:"password" json:"-"`
-}
 
 // Session 表示一个用户会话
 type Session struct {
@@ -24,50 +21,30 @@ type Session struct {
 
 // Auth 管理用户认证和会话
 type Auth struct {
-	users       map[string]*User
-	sessions    map[string]*Session
-	mu          sync.RWMutex
-	sessionTTL  time.Duration
-	rateLimiter *loginRateLimiter
+	sessions     map[string]*Session
+	mu           sync.RWMutex
+	sessionTTL   time.Duration
+	rateLimiter  *loginRateLimiter
+	systemdAvail bool
 }
 
 // NewAuth 创建认证管理器
-func NewAuth(users []User, sessionTTL time.Duration) *Auth {
-	a := &Auth{
-		users:       make(map[string]*User),
-		sessions:    make(map[string]*Session),
-		sessionTTL:  sessionTTL,
-		rateLimiter: newLoginRateLimiter(10, 1*time.Minute),
+func NewAuth(sessionTTL time.Duration, systemdAvail bool) *Auth {
+	return &Auth{
+		sessions:     make(map[string]*Session),
+		sessionTTL:   sessionTTL,
+		rateLimiter:  newLoginRateLimiter(10, 1*time.Minute),
+		systemdAvail: systemdAvail,
 	}
-	for i := range users {
-		a.users[users[i].Name] = &users[i]
-	}
-	return a
 }
 
-// HasUsers 检查是否存在用户
-func (a *Auth) HasUsers() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return len(a.users) > 0
-}
-
-// Authenticate 验证用户名和密码，成功返回 session token
+// Authenticate 验证系统用户名和密码，成功返回 session token
 func (a *Auth) Authenticate(username, password, clientIP string) (token string, err error) {
 	if a.rateLimiter.isLimited(clientIP) {
 		return "", ErrRateLimited
 	}
 
-	a.mu.RLock()
-	user, exists := a.users[username]
-	a.mu.RUnlock()
-
-	if !exists {
-		a.rateLimiter.recordFail(clientIP)
-		return "", ErrInvalidCredentials
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if !authenticateSystemUser(username, password, a.systemdAvail) {
 		a.rateLimiter.recordFail(clientIP)
 		return "", ErrInvalidCredentials
 	}
@@ -88,29 +65,110 @@ func (a *Auth) Authenticate(username, password, clientIP string) (token string, 
 	return token, nil
 }
 
-// Register 注册新用户（仅在无用户时允许首次注册，或已登录管理员添加）
-func (a *Auth) Register(username, password string) error {
-	if len(password) < 6 {
-		return ErrPasswordTooShort
+// authenticateSystemUser 验证 Linux 系统用户密码
+// 优先使用 Python PAM 模块验证，回退到 su + PTY 方式
+func authenticateSystemUser(username, password string, systemdAvail bool) bool {
+	if !systemdAvail {
+		return username != "" && password != ""
 	}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if _, exists := a.users[username]; exists {
-		return ErrUserExists
+	if !userExists(username) {
+		return false
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
+	if authViaPamPython(username, password) {
+		return true
+	}
+
+	return authViaSuPty(username, password)
+}
+
+// authViaPamPython 使用 Python3 调用 PAM 模块验证密码
+func authViaPamPython(username, password string) bool {
+	script := `
+import pam, sys
+p = pam.pam()
+try:
+    result = p.authenticate(sys.argv[1], sys.argv[2])
+    sys.exit(0 if result else 1)
+except Exception:
+    sys.exit(2)
+`
+	cmd := exec.Command("python3", "-c", script, username, password)
+	err := cmd.Run()
+	return err == nil
+}
+
+// killProcess 安全终止进程
+func killProcess(cmd *exec.Cmd) {
+	if cmd != nil && cmd.Process != nil {
+		cmd.Process.Kill()
+	}
+}
+
+// waitWithTimeout 等待子进程结束，超时则终止
+func waitWithTimeout(done <-chan error, timeout time.Duration) error {
+	select {
+	case err := <-done:
 		return err
+	case <-time.After(timeout):
+		return fmt.Errorf("操作超时")
+	}
+}
+
+// authViaSuPty 通过 su + PTY 方式验证密码（回退方案）
+func authViaSuPty(username, password string) bool {
+	cmd := exec.Command("su", "-l", username, "-c", "exit 0")
+
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return false
+	}
+	defer ptmx.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	buf := make([]byte, 8192)
+	ptmx.SetReadDeadline(time.Now().Add(3 * time.Second))
+	n, _ := ptmx.Read(buf)
+
+	output := string(buf[:n])
+
+	if !containsPasswordPrompt(output) {
+		err := waitWithTimeout(done, 3*time.Second)
+		if err != nil {
+			killProcess(cmd)
+		}
+		return err == nil
 	}
 
-	a.users[username] = &User{
-		Name:         username,
-		PasswordHash: string(hash),
+	ptmx.Write([]byte(password + "\n"))
+
+	err = waitWithTimeout(done, 5*time.Second)
+	if err != nil {
+		killProcess(cmd)
 	}
-	return nil
+	return err == nil
+}
+
+// userExists 检查系统用户是否存在
+func userExists(username string) bool {
+	cmd := exec.Command("id", username)
+	return cmd.Run() == nil
+}
+
+// containsPasswordPrompt 检查输出是否包含密码提示
+func containsPasswordPrompt(output string) bool {
+	prompts := []string{"Password:", "密码："}
+	for _, p := range prompts {
+		if strings.Contains(output, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateSession 验证 session token，返回用户名
@@ -138,45 +196,6 @@ func (a *Auth) Logout(token string) {
 	a.mu.Lock()
 	delete(a.sessions, token)
 	a.mu.Unlock()
-}
-
-// GetUsers 返回所有用户列表（用于配置持久化）
-func (a *Auth) GetUsers() []User {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	users := make([]User, 0, len(a.users))
-	for _, u := range a.users {
-		users = append(users, *u)
-	}
-	return users
-}
-
-// ChangePassword 修改用户密码
-func (a *Auth) ChangePassword(username, oldPassword, newPassword string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	user, exists := a.users[username]
-	if !exists {
-		return ErrUserNotFound
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
-		return ErrInvalidCredentials
-	}
-
-	if len(newPassword) < 6 {
-		return ErrPasswordTooShort
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-
-	user.PasswordHash = string(hash)
-	return nil
 }
 
 // CleanExpiredSessions 清理过期会话

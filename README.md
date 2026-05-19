@@ -1,8 +1,9 @@
 # NAS Manager (Go 版本)
 
-基于 Go 语言重写的 NAS 服务管理面板，提供 Web 界面管理 systemd 服务、实时终端等功能。
+基于 Go 语言的 NAS 服务管理面板，提供 Web 界面管理 systemd 服务、实时终端等功能。
 
 > 本项目代码由 AI 生成，仅供学习参考。
+> **仅部署在 Linux 平台**（依赖 systemd），开发机为 Windows。
 
 ## 功能特性
 
@@ -11,28 +12,32 @@
 - 日志查看：在线查看服务日志
 - Web 终端：提供基于 WebSocket 的终端访问
 - 配置管理：支持 YAML 配置文件，热重载
-- Demo 模式：在非 systemd 环境下也能运行
+- Demo 模式：在非 Linux 环境下自动启用（11 个模拟服务），方便开发调试
 - 单文件部署：所有资源打包在一个可执行文件中
 
 ## 快速开始
 
-### 编译
+### 编译（Linux 目标）
 
-```bash
-cd nas-manager-go
-go build -o nas-manager .
+在开发机（Windows）上编译 Linux 二进制：
+
+```powershell
+$env:GOOS="linux"; $env:GOARCH="amd64"
+go build -ldflags="-s -w" -o nas-manager .
 ```
 
-或者使用 Makefile：
+在 Linux 目标机上直接编译：
 
 ```bash
-make build
+go build -ldflags="-s -w" -o nas-manager .
 ```
+
+> **注意**：`Makefile` 中所有 `build` 目标的路径 `./cmd/nas-manager` 已废弃，请直接使用上方命令。
 
 ### 运行
 
 ```bash
-./nas-manager
+sudo ./nas-manager
 ```
 
 默认访问地址：<http://localhost:5000>
@@ -120,36 +125,20 @@ categories:
   download: 下载工具
 ```
 
-## 跨平台编译
-
-使用 Makefile 进行跨平台编译：
+## 部署到 Linux
 
 ```bash
-# Linux
-make build-linux
-
-# macOS
-make build-darwin
-
-# Windows
-make build-windows
-
-# 所有平台
-make build-all
+# 在目标机上
+sudo ./nas-manager
 ```
+
+建议创建 systemd 服务实现自启动（需手动编写 service 单元文件）。`-install` / `-uninstall` 参数暂未实现。
 
 ## 未来计划
 
-- [x] 完整的 PTY 终端支持
 - [ ] 系统服务安装/卸载功能
-- [x] 用户认证
-- [x] 服务分组和标签
 - [ ] 性能监控面板
 
 ## 许可证
 
 MIT
-
-## 致谢
-
-基于原 Python 版本 NAS Manager 重构，参考了 AdGuard Home 的架构设计。

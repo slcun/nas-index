@@ -65,13 +65,8 @@ func main() {
 
 	configMgr := config.NewManager(configPath)
 
-	authUsers := configMgr.GetUsers()
-	sessionTTLOne := configMgr.GetSessionTTL()
-	authUsersConverted := make([]auth.User, len(authUsers))
-	for i, u := range authUsers {
-		authUsersConverted[i] = auth.User{Name: u.Name, PasswordHash: u.PasswordHash}
-	}
-	authMgr := auth.NewAuth(authUsersConverted, time.Duration(sessionTTLOne)*time.Hour)
+	sessionTTLHours := configMgr.GetSessionTTL()
+	authMgr := auth.NewAuth(time.Duration(sessionTTLHours)*time.Hour, service.IsSystemdAvailable())
 
 	go func() {
 		for {

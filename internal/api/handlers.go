@@ -24,10 +24,9 @@ func NewHandlers(configMgr *config.Manager, serviceMgr *service.Manager) *Handle
 	}
 }
 
-// GetServices 获取所有服务
+// GetServices 获取所有已配置的服务
 func (h *Handlers) GetServices(w http.ResponseWriter, r *http.Request) {
 	services := h.serviceMgr.ListServices()
-	categories := h.configMgr.GetCategories()
 
 	allTags := make(map[string]bool)
 	allGroups := make(map[string]bool)
@@ -51,18 +50,25 @@ func (h *Handlers) GetServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type response struct {
-		Services   []*service.ServiceInfo `json:"services"`
-		Categories map[string]string      `json:"categories"`
-		Tags       []string               `json:"tags"`
-		Groups     []string               `json:"groups"`
+		Services []*service.ServiceInfo `json:"services"`
+		Tags     []string               `json:"tags"`
+		Groups   []string               `json:"groups"`
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response{
-		Services:   services,
-		Categories: categories,
-		Tags:       tagsList,
-		Groups:     groupsList,
+		Services: services,
+		Tags:     tagsList,
+		Groups:   groupsList,
+	})
+}
+
+// GetSystemServices 获取系统中所有可用的服务（用于添加服务时选择）
+func (h *Handlers) GetSystemServices(w http.ResponseWriter, r *http.Request) {
+	services := h.serviceMgr.ListSystemServices()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"services": services,
 	})
 }
 
@@ -82,6 +88,77 @@ func (h *Handlers) GetService(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(svc)
+}
+
+// AddService 添加一个服务配置
+func (h *Handlers) AddService(w http.ResponseWriter, r *http.Request) {
+	var svc config.Service
+	if err := json.NewDecoder(r.Body).Decode(&svc); err != nil {
+		http.Error(w, "无效的请求数据", http.StatusBadRequest)
+		return
+	}
+
+	if svc.Name == "" {
+		http.Error(w, "服务名称不能为空", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.configMgr.AddService(svc); err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "服务已添加",
+	})
+}
+
+// UpdateService 更新一个服务配置
+func (h *Handlers) UpdateService(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		http.Error(w, "缺少服务名称", http.StatusBadRequest)
+		return
+	}
+
+	var svc config.Service
+	if err := json.NewDecoder(r.Body).Decode(&svc); err != nil {
+		http.Error(w, "无效的请求数据", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.configMgr.UpdateService(name, svc); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "服务已更新",
+	})
+}
+
+// DeleteService 删除一个服务配置
+func (h *Handlers) DeleteService(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		http.Error(w, "缺少服务名称", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.configMgr.RemoveService(name); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "服务已删除",
+	})
 }
 
 // StartService 启动服务

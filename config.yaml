@@ -1,12 +1,11 @@
 # NAS 服务管理面板 — 配置文件
 
 services:
-  # 媒体中心
+  # 家庭娱乐
   - name: jellyfin.service
     display_name: Jellyfin
     description: 媒体服务器
     port: 8096
-    category: media
     web: true
     tags: [媒体, 流媒体]
     group: 家庭娱乐
@@ -15,7 +14,6 @@ services:
     display_name: Sonarr
     description: 电视节目管理
     port: 8989
-    category: media
     web: true
     tags: [媒体, PVR]
     group: 家庭娱乐
@@ -24,7 +22,6 @@ services:
     display_name: Radarr
     description: 电影管理
     port: 7878
-    category: media
     web: true
     tags: [媒体, PVR]
     group: 家庭娱乐
@@ -34,27 +31,23 @@ services:
     description: 照片管理
     port: 2283
     path: /photos
-    category: media
     web: true
     tags: [媒体, 照片]
     group: 家庭娱乐
 
-  # 文件管理
-  - name: nginx.service
-    display_name: 文件管理器
-    description: Web 文件管理
-    port: 5001
-    path: /file
-    category: files
+  - name: prowlarr.service
+    display_name: Prowlarr
+    description: 索引器管理
+    port: 9696
     web: true
-    tags: [文件, Web]
+    tags: [媒体, 索引]
+    group: 家庭娱乐
 
-  # 下载工具
+  # 下载管理
   - name: qbittorrent.service
     display_name: qBittorrent
     description: BT 下载工具
     port: 8080
-    category: download
     web: true
     tags: [下载, BT]
     group: 下载管理
@@ -63,7 +56,6 @@ services:
     display_name: Transmission
     description: BT 下载工具
     port: 9091
-    category: download
     web: true
     tags: [下载, BT]
     group: 下载管理
@@ -73,35 +65,31 @@ services:
     display_name: Cockpit
     description: Web 系统管理
     port: 9090
-    category: system
     web: true
     tags: [系统, 管理]
 
   - name: docker.service
     display_name: Docker
     description: 容器引擎
-    category: system
     web: false
     tags: [系统, 容器]
+
+  # 文件管理
+  - name: nginx.service
+    display_name: 文件管理器
+    description: Web 文件管理
+    port: 5001
+    path: /file
+    web: true
+    tags: [文件, Web]
 
   # 备份与同步
   - name: syncthing.service
     display_name: Syncthing
     description: 文件同步
     port: 8384
-    category: backup
     web: true
     tags: [同步, 备份]
-
-  # 其他
-  - name: prowlarr.service
-    display_name: Prowlarr
-    description: 索引器管理
-    port: 9696
-    category: other
-    web: true
-    tags: [媒体, 索引]
-    group: 家庭娱乐
 
 # 从列表中排除的系统服务（不显示在面板上）
 exclude_services:
@@ -155,13 +143,3 @@ exclude_services:
   - unattended-upgrades.service
   - uuidd.service
   - whoopsie.service
-
-# 服务分类显示
-categories:
-  media: 媒体中心
-  files: 文件管理
-  download: 下载工具
-  system: 系统工具
-  backup: 备份与同步
-  tools: 效率与工具
-  other: 其他

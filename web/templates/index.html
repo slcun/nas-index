@@ -37,10 +37,19 @@
             </div>
         </div>
         <div class="topbar-right">
-            <span class="user-badge" id="user-badge" style="display:none">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                <span id="username-display">-</span>
-            </span>
+            <div class="user-menu" id="user-menu" style="display:none">
+                <button class="topbar-btn user-btn" id="user-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span id="username-display">-</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="user-dropdown" id="user-dropdown">
+                    <button class="dropdown-item" id="logout-btn">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        <span>退出登录</span>
+                    </button>
+                </div>
+            </div>
             <button class="topbar-btn theme-btn" id="theme-toggle" title="切换主题">
                 <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
                 <svg id="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -53,11 +62,18 @@
     </header>
 
     <div class="toolbar">
-        <div class="search-wrap">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="search-input" class="search-input" placeholder="搜索服务名称或描述...">
+        <div class="toolbar-row">
+            <div class="search-wrap">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" class="search-input" placeholder="搜索服务名称、描述或标签...">
+            </div>
+            <button class="topbar-btn add-btn" id="add-service-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>添加服务</span>
+            </button>
         </div>
-        <div class="filter-bar" id="category-bar"></div>
+        <div class="filter-bar" id="group-bar"></div>
+        <div class="filter-bar" id="tag-bar"></div>
     </div>
 
     <main id="service-container">
@@ -66,6 +82,68 @@
             <span>正在加载服务列表...</span>
         </div>
     </main>
+
+    <!-- 服务编辑弹窗 -->
+    <div class="modal" id="service-modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">添加服务</h3>
+                <button class="modal-close" id="modal-close">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <div class="modal-body" id="service-form">
+                <div class="form-group" id="svc-system-select-group">
+                    <label>选择系统服务</label>
+                    <select id="svc-system-select" class="form-select">
+                        <option value="">加载中...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="svc-name-group" style="display:none">
+                    <label>服务名称</label>
+                    <input type="text" id="svc-name" class="form-input" placeholder="如 nginx.service">
+                </div>
+                <div class="form-group">
+                    <label>显示名称</label>
+                    <input type="text" id="svc-display-name" class="form-input" placeholder="如 Nginx">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <input type="text" id="svc-description" class="form-input" placeholder="服务描述">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>端口</label>
+                        <input type="number" id="svc-port" class="form-input" placeholder="如 8080">
+                    </div>
+                    <div class="form-group">
+                        <label>路径</label>
+                        <input type="text" id="svc-path" class="form-input" placeholder="如 /admin">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>分组</label>
+                    <input type="text" id="svc-group" class="form-input" list="group-list" placeholder="如 家庭娱乐">
+                    <datalist id="group-list"></datalist>
+                </div>
+                <div class="form-group">
+                    <label>标签 <span class="form-hint">逗号分隔</span></label>
+                    <input type="text" id="svc-tags" class="form-input" placeholder="如 媒体, 流媒体, PVR">
+                </div>
+                <div class="form-group form-checkbox">
+                    <label>
+                        <input type="checkbox" id="svc-web" checked>
+                        <span>Web 服务（可点击跳转）</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modal-cancel">取消</button>
+                <button class="btn btn-primary" id="modal-save">保存</button>
+            </div>
+        </div>
+    </div>
 
     <div id="toast-container"></div>
     <script src="/static/js/app.js"></script>

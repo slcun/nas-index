@@ -9,13 +9,20 @@ type ServiceInfo struct {
 	Description   string   `json:"description"`
 	Port          int      `json:"port,omitempty"`
 	Path          string   `json:"path,omitempty"`
-	Category      string   `json:"category"`
 	Web           bool     `json:"web"`
 	ActiveState   string   `json:"active_state"`
 	UnitFileState string   `json:"unit_file_state"`
 	Managed       bool     `json:"managed"`
 	Tags          []string `json:"tags,omitempty"`
 	Group         string   `json:"group,omitempty"`
+}
+
+// SystemServiceInfo 系统中可用的服务信息（用于添加服务时选择）
+type SystemServiceInfo struct {
+	Name          string `json:"name"`
+	Description   string `json:"description"`
+	UnitFileState string `json:"unit_file_state"`
+	Configured    bool   `json:"configured"`
 }
 
 // mergeServiceConfig 合并配置和自动发现的服务信息
@@ -26,7 +33,6 @@ func mergeServiceConfig(cfgService config.Service, autoInfo *ServiceInfo) *Servi
 		Description: cfgService.Description,
 		Port:        cfgService.Port,
 		Path:        cfgService.Path,
-		Category:    cfgService.Category,
 		Web:         cfgService.Web,
 		Managed:     true,
 		Tags:        cfgService.Tags,

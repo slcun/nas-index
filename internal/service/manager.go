@@ -2,6 +2,7 @@ package service
 
 import (
 	"nas-manager/internal/config"
+	"sort"
 )
 
 // Manager 负责服务的管理
@@ -18,7 +19,7 @@ func NewManager(configMgr *config.Manager) *Manager {
 	}
 }
 
-// ListServices 列出所有服务
+// ListServices 列出所有已配置的服务
 func (m *Manager) ListServices() []*ServiceInfo {
 	if !m.systemdAvail {
 		return m.listDemoServices()
@@ -26,18 +27,37 @@ func (m *Manager) ListServices() []*ServiceInfo {
 
 	m.configMgr.ReloadIfChanged()
 
-	// 获取配置中的服务
 	cfgServices := m.configMgr.GetServices()
+
+	var result []*ServiceInfo
+	for _, cfgSvc := range cfgServices {
+		autoInfo, _ := getServiceDetail(cfgSvc.Name)
+		merged := mergeServiceConfig(cfgSvc, autoInfo)
+		result = append(result, merged)
+	}
+
+	return result
+}
+
+// ListSystemServices 列出系统中所有可用的服务（用于添加服务时选择）
+func (m *Manager) ListSystemServices() []SystemServiceInfo {
+	if !m.systemdAvail {
+		return listDemoSystemServices()
+	}
+
 	excludeServices := m.configMgr.GetExcludeServices()
 	excludeMap := make(map[string]bool)
 	for _, name := range excludeServices {
 		excludeMap[name] = true
 	}
 
-	// 获取自动发现的服务
+	configuredMap := make(map[string]bool)
+	for _, svc := range m.configMgr.GetServices() {
+		configuredMap[svc.Name] = true
+	}
+
 	autoServices := make(map[string]*ServiceInfo)
 
-	// 从 systemctl list-unit-files 获取
 	units, _ := listUnitFiles()
 	for _, unit := range units {
 		name := unit["name"]
@@ -50,7 +70,6 @@ func (m *Manager) ListServices() []*ServiceInfo {
 		}
 	}
 
-	// 从 /etc/systemd/system 目录扫描
 	etcServices := scanEtcSystemd(excludeMap)
 	for name, info := range etcServices {
 		if _, exists := autoServices[name]; !exists {
@@ -58,26 +77,22 @@ func (m *Manager) ListServices() []*ServiceInfo {
 		}
 	}
 
-	var result []*ServiceInfo
-	processed := make(map[string]bool)
-
-	// 先添加配置中的服务（优先级高）
-	for _, cfgSvc := range cfgServices {
-		autoInfo := autoServices[cfgSvc.Name]
-		merged := mergeServiceConfig(cfgSvc, autoInfo)
-		result = append(result, merged)
-		processed[cfgSvc.Name] = true
+	result := make([]SystemServiceInfo, 0, len(autoServices))
+	for name, info := range autoServices {
+		result = append(result, SystemServiceInfo{
+			Name:          name,
+			Description:   info.Description,
+			UnitFileState: info.UnitFileState,
+			Configured:    configuredMap[name],
+		})
 	}
 
-	// 再添加自动发现的服务
-	for name, autoInfo := range autoServices {
-		if processed[name] {
-			continue
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Configured != result[j].Configured {
+			return !result[i].Configured
 		}
-		autoInfo.Managed = autoInfo.UnitFileState == "enabled" || autoInfo.UnitFileState == "static"
-		result = append(result, autoInfo)
-		processed[name] = true
-	}
+		return result[i].Name < result[j].Name
+	})
 
 	return result
 }
@@ -87,7 +102,6 @@ func (m *Manager) GetService(name string) *ServiceInfo {
 	services := m.ListServices()
 	for _, svc := range services {
 		if svc.Name == name {
-			// 更新最新的状态
 			if m.systemdAvail {
 				svc.ActiveState = getActiveState(name)
 			}
@@ -136,98 +150,104 @@ var demoServices = []*ServiceInfo{
 		DisplayName:   "Jellyfin",
 		Description:   "媒体服务器",
 		Port:          8096,
-		Category:      "media",
 		ActiveState:   "active",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"媒体", "流媒体"},
+		Group:         "家庭娱乐",
 	},
 	{
 		Name:          "sonarr.service",
 		DisplayName:   "Sonarr",
 		Description:   "电视节目管理",
 		Port:          8989,
-		Category:      "media",
 		ActiveState:   "active",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"媒体", "PVR"},
+		Group:         "家庭娱乐",
 	},
 	{
 		Name:          "radarr.service",
 		DisplayName:   "Radarr",
 		Description:   "电影管理",
 		Port:          7878,
-		Category:      "media",
 		ActiveState:   "inactive",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"媒体", "PVR"},
+		Group:         "家庭娱乐",
 	},
 	{
 		Name:          "qbittorrent.service",
 		DisplayName:   "qBittorrent",
 		Description:   "BT 下载工具",
 		Port:          8080,
-		Category:      "download",
 		ActiveState:   "active",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"下载", "BT"},
+		Group:         "下载管理",
 	},
 	{
 		Name:          "cockpit.service",
 		DisplayName:   "Cockpit",
 		Description:   "Web 系统管理",
 		Port:          9090,
-		Category:      "system",
 		ActiveState:   "active",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"系统", "管理"},
 	},
 	{
 		Name:          "docker.service",
 		DisplayName:   "Docker",
 		Description:   "容器引擎",
-		Category:      "system",
 		ActiveState:   "active",
 		UnitFileState: "enabled",
 		Web:           false,
 		Managed:       true,
+		Tags:          []string{"系统", "容器"},
 	},
 	{
 		Name:          "syncthing.service",
 		DisplayName:   "Syncthing",
 		Description:   "文件同步",
 		Port:          8384,
-		Category:      "backup",
 		ActiveState:   "inactive",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"同步", "备份"},
 	},
 	{
 		Name:          "transmission.service",
 		DisplayName:   "Transmission",
 		Description:   "BT 下载工具",
 		Port:          9091,
-		Category:      "download",
 		ActiveState:   "inactive",
 		UnitFileState: "disabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"下载", "BT"},
+		Group:         "下载管理",
 	},
 	{
 		Name:          "prowlarr.service",
 		DisplayName:   "Prowlarr",
 		Description:   "索引器管理",
 		Port:          9696,
-		Category:      "other",
 		ActiveState:   "active",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"媒体", "索引"},
+		Group:         "家庭娱乐",
 	},
 	{
 		Name:          "immich.service",
@@ -235,11 +255,12 @@ var demoServices = []*ServiceInfo{
 		Description:   "照片管理",
 		Port:          2283,
 		Path:          "/photos",
-		Category:      "media",
 		ActiveState:   "active",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"媒体", "照片"},
+		Group:         "家庭娱乐",
 	},
 	{
 		Name:          "nginx.service",
@@ -247,22 +268,56 @@ var demoServices = []*ServiceInfo{
 		Description:   "Web 文件管理",
 		Port:          5001,
 		Path:          "/file",
-		Category:      "files",
 		ActiveState:   "active",
 		UnitFileState: "enabled",
 		Web:           true,
 		Managed:       true,
+		Tags:          []string{"文件", "Web"},
 	},
+}
+
+// listDemoSystemServices 返回 demo 模式下的系统服务列表
+func listDemoSystemServices() []SystemServiceInfo {
+	configuredMap := make(map[string]bool)
+	for _, svc := range demoServices {
+		configuredMap[svc.Name] = true
+	}
+
+	extra := []SystemServiceInfo{
+		{Name: "apache2.service", Description: "Apache HTTP Server", UnitFileState: "disabled", Configured: false},
+		{Name: "mysql.service", Description: "MySQL Database", UnitFileState: "disabled", Configured: false},
+		{Name: "postgresql.service", Description: "PostgreSQL Database", UnitFileState: "disabled", Configured: false},
+		{Name: "redis.service", Description: "Redis Server", UnitFileState: "disabled", Configured: false},
+		{Name: "samba.service", Description: "Samba File Sharing", UnitFileState: "disabled", Configured: false},
+		{Name: "nfs-server.service", Description: "NFS Server", UnitFileState: "disabled", Configured: false},
+		{Name: "homeassistant.service", Description: "Home Assistant", UnitFileState: "disabled", Configured: false},
+		{Name: "plexmediaserver.service", Description: "Plex Media Server", UnitFileState: "disabled", Configured: false},
+	}
+
+	result := make([]SystemServiceInfo, 0, len(demoServices)+len(extra))
+	for _, svc := range demoServices {
+		result = append(result, SystemServiceInfo{
+			Name:          svc.Name,
+			Description:   svc.Description,
+			UnitFileState: svc.UnitFileState,
+			Configured:    true,
+		})
+	}
+	result = append(result, extra...)
+
+	return result
 }
 
 func (m *Manager) listDemoServices() []*ServiceInfo {
 	cfgServices := m.configMgr.GetServices()
+	if len(cfgServices) == 0 {
+		return demoServices
+	}
+
 	var result []*ServiceInfo
 	processed := make(map[string]bool)
 
-	// 先合并配置中的服务
 	for _, cfgSvc := range cfgServices {
-		// 查找匹配的 demo 服务
 		var demoInfo *ServiceInfo
 		for _, demo := range demoServices {
 			if demo.Name == cfgSvc.Name {
@@ -273,14 +328,6 @@ func (m *Manager) listDemoServices() []*ServiceInfo {
 		merged := mergeServiceConfig(cfgSvc, demoInfo)
 		result = append(result, merged)
 		processed[cfgSvc.Name] = true
-	}
-
-	// 再添加剩余的 demo 服务
-	for _, demo := range demoServices {
-		if !processed[demo.Name] {
-			result = append(result, demo)
-			processed[demo.Name] = true
-		}
 	}
 
 	return result

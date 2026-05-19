@@ -19,6 +19,8 @@ var upgrader = websocket.Upgrader{
 
 // HandleWebSocket 处理 WebSocket 连接，创建真实 PTY 终端
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	username := r.Header.Get("X-User")
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade 失败: %v", err)
@@ -28,7 +30,7 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	cols, rows := parseSizeFromQuery(r)
 
-	term, err := NewTerminal(cols, rows)
+	term, err := NewTerminal(cols, rows, username)
 	if err != nil {
 		log.Printf("创建终端失败: %v", err)
 		conn.WriteMessage(websocket.TextMessage, []byte("\r\n创建终端失败: "+err.Error()+"\r\n"))
@@ -36,7 +38,6 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer term.Close()
 
-	// PTY -> WebSocket：读取终端输出并发送给客户端
 	done := make(chan struct{})
 	go func() {
 		buf := make([]byte, 4096)
@@ -60,7 +61,6 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// WebSocket -> PTY：接收客户端输入并写入终端
 	for {
 		messageType, p, err := conn.ReadMessage()
 		if err != nil {
@@ -71,13 +71,11 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		if messageType == websocket.TextMessage || messageType == websocket.BinaryMessage {
 			msg := string(p)
 
-			// 处理调整大小的特殊消息
 			if strings.HasPrefix(msg, "\x1b[RESIZE:") {
 				handleResize(msg, term)
 				continue
 			}
 
-			// 将用户输入写入 PTY
 			if _, err := term.Write(p); err != nil {
 				log.Printf("PTY 写入失败: %v", err)
 				return
